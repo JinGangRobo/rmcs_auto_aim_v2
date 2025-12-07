@@ -38,6 +38,7 @@ include_directories(
     ${rmcs_executor_INCLUDE_DIRS}
     ${rmcs_description_INCLUDE_DIRS}
     ${fast_tf_INCLUDE_DIRS}
+    ${hikcamera_INCLUDE_DIRS}
 )
 
 ## 代码资源搜索
