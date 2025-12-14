@@ -1,5 +1,7 @@
 # 较为现代化的机甲大师自瞄
 
+一些具体的文档和最佳实践可以在 [`doc`](./doc/) 目录中找到，如果需要对该项目进行二次开发，优先查看该目录下的示范和 [`test`](./test/) 中的写法
+
 ## 前言
 
 自瞄系统是一个拥有工程细节的项目，在简单概括下，只有接收图像，识别，位姿估计，预测，控制这几步，但自瞄不是一道典型的算法题，它无法通过确定的输入得到确定的结果，我们更多时候需要寻找 BUG 和改良系统，我们当然可以用复用程度低的代码来搭建出一个 Work Around，来应对特定情况下的特定需求，但一旦涉及到应对复杂的比赛环境，多个车辆的定制化需求差异，不同时刻对不同系统的不同数据的可视化或者保存分析需求，低内聚高耦合的代码组织必然带来沉重而悲伤的维护与重构成本
@@ -7,14 +9,6 @@
 还有一个方面，作为一个典型的工程化落地项目，我们必不可少的会遇到很多算法，重头实现一个已存在的算法是盲目的行为，需要浪费大量时间去组织代码和修正错误，还要进行大量测试，成熟的算法往往可以在 Github 上寻找到测试完备，接口齐全的仓库，我们只需要移植或是拷贝他们，在明确输入输出的情况下良好地使用它们，毕竟我们不是在前沿领域做算法研发
 
 本项目以工程化为最终目的，为机器人提供一个测试与工作流完备，配置友好，重构开销小，错误提示拟人的自瞄系统，方便队员的后续维护和持续开发，为迭代提供舒适的代码基础
-
-## 核心概念
-
-依赖隐藏：
-
-非侵入式：
-
-自动化与测试：
 
 ## 部署步骤
 
@@ -50,15 +44,70 @@ cmake --build build -j
 
 - `utility`: 和运行业务无关的基本数据结果，基本算法和辅助工具，与一些第三方库的有限接口封装
 
-### 任务调度
-
-TODO
+### 架构设计
 
 ## 调试指南
 
+### Ros2 Topic 可视化
+
+**Foxglove 转发端**
+
+在 Docker 开发容器或者机器人 NUC 容器中下载并启动对应的转发端：
+
+```sh
+sudo apt install ros-$ROS_DISTRO-foxglove-bridge
+ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
+```
+
+在哪里运行程序发布 Topic，就在哪里启动该转发端
+
+**Foxglove 桌面端**
+
+我们可以在浏览器访问 [foxglove网页端](https://app.foxglove.dev/)，或者下载桌面端软件
+
+在 Debian 系中，可以访问该网址 [Download](https://foxglove.dev/download) 下载 Deb 包，或者运行下面指令来安装：
+
+```sh
+sudo apt update && sudo apt install foxglove-studio
+```
+
+如果使用 ArchLinux，则可以通过 AUR 源来安装：
+
+```sh
+paru -S foxglove-bin
+```
+
+然后在 `Open Connection` 中打开 `ws://localhost:8765` 这个 `URL`
+
+> 要注意的是，上述 IP 地址取决于运行程序的主机，如果是在机器人上运行的，则需要修改为机器人的 IP，比如：`ws://169.254.233.233:8765`
+
+**确认 Topic 的常见指令**
+
+```sh
+# 列举当前正在发布的话题名称
+ros2 topic list
+
+# 测量话题的发布频率
+ros2 topic hz /topic-name
+
+# 测量话题的发布带宽
+ros2 topic bw /topic-name
+
+# 直接输出话题
+ros2 topic echo /topic-name
+```
+
+**测试**
+
+可以运行自瞄测试下的 `example_visualization` 来测试可视化：
+
+```sh
+./build/example_visualization
+```
+
 ### OPENCV 可视化窗口
 
-如果你使用英伟达 GPU，那你的 OPENCV 的可视化可能会在这一步被拿下，比如`cv::imshow`，设置环境变量永远使用 CPU 渲染即可
+如果你使用英伟达 GPU，那你的 OPENCV 的可视化可能会在这一步被拿下，比如`cv::imshow`，设置环境变量永远使用 CPU 渲染即可，另外，其他的 X11 协议的 GUI 程序也可能栽在这里，都可以通过此办法解决
 
 ```
 # F*** Nvidia
@@ -96,11 +145,16 @@ ros2 launch rmcs_auto_aim_v2 launch.py
 [...] [INFO] [...] [visualization]: Sdp has been written to: /tmp/auto_aim.sdp
 ```
 
+随后在本机下载 `VLC`，此外，还需要下载插件：`vlc-plugin-live555` 和 `vlc-plugin-ffmpeg` 以支持播放推流
+
 接下来只需要将 `/tmp/auto_aim.sdp` 文件拷贝到自己电脑上，使用能够打开`SDP`文件的视频播放器打开即可，也可以使用指令：
 
 ```sh
-# 如果自瞄运行在机器人上，就加上 --remote 参数
-play-autoaim --user username [--remote][--no-copy]
+# - 如果自瞄运行在机器人上，就加上 --remote 参数
+# - 'username' 是本机的用户名，即打开 VLC 的环境，通过 ssh 远程打开
+# - 如果你需要在第三台设备打开第二台设备的视频播放器，就使用 --ip 指定该设备的 ip（一般不用）
+# - 如果已经拷贝完配置文件，就可以使用 --no-copy 直接打开播放器，跳过拷贝
+play-autoaim --user username [--remote][--no-copy][--ip]
 ```
 
 随后你会看到这样的输出：
@@ -120,3 +174,80 @@ creeper@localhost's password:
 脚本默认使用 VLC 作为视频流播放器，默认延迟较高，可以将播放器的播放缓存设置为 0 来获得**低延迟的串流体验**：`Tools -> Preferences -> search 'caching'`
 
 愉快调试吧！
+
+### 视频流录制
+
+可以通过 FFmpeg 来录制 RTP 流：
+
+```sh
+ffmpeg -i "rtp://169.254.233.233:5000" -c:v copy video.mp4
+```
+
+将 `169.254.233.233` 修改为机器人或者测试主机的 IP，将 `video.mp4` 修改为自定义名字
+
+> 目前 RTP 流只能被一个消费者读取，所以使用 VLC 打开流和使用 FFmpeg 录制流不能同时进行，如果要同时进行，可以使用 FFmpeg 将流复制一份，像这样：`ffmpeg -i "rtp://169.254.233.233:5000" -c:v copy -f mpegts udp://127.0.0.1:1234`
+
+## 核心概念
+
+### 0. 依赖隐藏：
+
+C++ 中的一个对象只要内存布局确定，就可以被传递，即便是不完整的类型，著名的 `Impl` 模式就是这样，同样地，我们可以利用这个写法，将一些比较膨胀的依赖隐藏在一个前置声明的类型中，只有当我们真正需要该依赖的上下文时，用过引入完整定义，来使用被隐藏起来的依赖
+
+比如：
+
+```cpp
+// object.hpp
+struct Object {
+    struct Details;
+    auto details() -> Details&;
+};
+// object.details.hpp
+struct Object::Details {
+    // 一些庞大的上下文，比如 Ros2 和 OpenCV 对象
+};
+```
+
+在声明接口时，我们可以仅包含 `object.hpp`，作为对象传递，而在 `cpp` 文件中真正需要该上下文以实现功能时，就可以引入 `object.details.hpp`，这样，就实现了依赖的隐藏，头文件细节可以有效收束在实现的编译单元，不会随着头文件的引入而传播：
+
+```cpp
+// use_object.hpp
+#include "object.hpp"
+auto use_object(Object&) -> void;
+
+// use_object.cpp
+#include "use_object.hpp"
+#include "object.details.hpp"
+auto use_object(Object& object) -> void {
+    auto& details = object.details();
+    // 取出一些惊人而膨胀的上下文，比如：`rclcpp::Node`
+}
+```
+
+通过这种方式，我们可以有效缩短**增量编译**的时间，特别是用到了诸如 `rclcpp`，`eigen`，`opencv` 等庞然大物时
+
+### 1. 非侵入式：
+
+使用继承与虚函数作为接口是**典型的侵入式多态**，但这并不意味着我们不能使用虚函数，相反，我们不得不用虚函数，它作为 Cpp 主要的运行时多态实现（还有一个是类型擦除），是实现运行时方法和上下文注册所必要的
+
+现代 Cpp 常以 concept 作为接口，比如协程对象的实现，是“组合”理念的体现
+
+对于“组合优于继承”，我们有：
+
+- 实现 concept 约束不需要引入依赖（即接口声明的头文件），即非侵入式，重构开销更小，和依赖隐藏的理念契合
+- concept 的组合的开销小于抽象类的组合
+- 最小化运行时抽象，使用最少的虚函数来完成运行时注册，面向用户的编译期多态通过模板实现
+- concept 可以利用 `static_assert` 等工具来提供更友善的编写期提示
+
+一个典型的例子：[`kernel/capturer.cpp`](https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2/blob/b80584118d2361840c647f4f90cc0ca97a065dc6/src/kernel/capturer.cpp#L39)，它使用了 `Capturer` 的特征，但是一部分是编译期多态接口，一部分是运行时多态接口，编译期接口用于重复性初始化，多态接口用于注册
+
+### 2. 提前编写期检查：
+
+书接上回，在使用 concept 作为接口约束时，应大量使用 `requires`，`static_assert` 等手段来约束，特别是 `static_assert`，它可以将信息用文字传达给开发者，相当友好
+
+### 3. 推迟运行时多态：
+
+我们需要思考，运行时多态是必要的吗？很多时候我们引入了虚函数，多了很多重复性代码，使用基类指针持有对象，但对于真正的运行时，其实并没有那么多接口需求
+
+### 4. 自动化与测试：
+
+一个工程化项目，其测试代码应该占据**一半左右**的代码量，特别是对于 RM 这种对代码稳定性有高要求的场景，同时 `CI/CD` 的妥善使用，可以大大降低我们在更新，部署等场景所花费的精力

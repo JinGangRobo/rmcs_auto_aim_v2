@@ -33,7 +33,7 @@ auto main() -> int try {
     };
 
     auto framerate = FramerateCounter {};
-    framerate.set_intetval(5s);
+    framerate.set_interval(5s);
 
     /// Runtime
     ///
@@ -42,7 +42,7 @@ auto main() -> int try {
     auto pose_estimator = kernel::PoseEstimator {};
     auto visualization  = kernel::Visualization {};
 
-    auto control_ststem = kernel::ControlSystem {};
+    auto control_system = kernel::ControlSystem {};
 
     /// Configure
     ///
@@ -85,9 +85,6 @@ auto main() -> int try {
             break;
 
         if (auto image = capturer.fetch_image()) {
-            if (framerate.tick()) {
-                rclcpp_node.info("Framerate: {}hz", framerate.fps());
-            }
 
             auto armors_2d = identifier.sync_identify(*image);
             if (!armors_2d.has_value()) {
@@ -98,15 +95,22 @@ auto main() -> int try {
                 for (const auto& armor_2d : *armors_2d)
                     util::draw(*image, armor_2d);
             }
-
             if (visualization.initialized()) {
                 visualization.send_image(*image);
             }
 
+            auto armor_3d = std::ignore;
+
+            auto future_state = std::ignore;
+
             using namespace rmcs::util;
-            control_ststem.update_state({
+            control_system.update_state({
                 .timestamp = Clock::now(),
             });
+
+            if (framerate.tick()) {
+                rclcpp_node.info("Framerate: {}hz", framerate.fps());
+            }
         }
 
         rclcpp_node.spin_once();
