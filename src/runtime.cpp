@@ -12,6 +12,9 @@
 #include "utility/rclcpp/parameters.hpp"
 #include "utility/singleton/running.hpp"
 
+#include "utility/shared/client.hpp"
+#include "utility/shared/context.hpp"
+
 #include <csignal>
 #include <yaml-cpp/yaml.h>
 
@@ -44,6 +47,8 @@ auto main() -> int {
     auto visualization  = kernel::Visualization {};
 
     auto control_system = kernel::ControlSystem {};
+
+    auto shm_sender = shm::Client<util::AutoAimState>::Send {};
 
     /// Configure
     ///
@@ -114,6 +119,27 @@ auto main() -> int {
             if (visualization.initialized()) {
                 visualization.visualize_armors(*armors_3d);
             }
+
+            if (!shm_sender.opened()) shm_sender.open(util::shared_autoaim_state_name);
+
+            shm_sender.with_write([&](util::AutoAimState& state) {
+                state.timestamp = util::Clock::now();
+
+                if (!armors_3d->empty()) {
+                    // 选择第一个目标
+                    const auto& target = (*armors_3d)[0];
+                    
+                    // 存储结果到共享内存
+                    state.should_control = true;
+                    state.target_posture = target.translation; 
+
+                    rclcpp_node.info("[Runtime] Solved Target: x={:.3f}, y={:.3f}, z={:.3f}", 
+                        target.translation.x, target.translation.y, target.translation.z);
+                } else {
+                    state.should_control = false;
+                }
+            });
+
             // TODO: pose estimator
             // TODO: predictor
             // TODO: control
