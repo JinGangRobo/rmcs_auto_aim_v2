@@ -60,7 +60,7 @@ auto StreamContext::check_support() noexcept -> std::expected<void, std::string_
             "Reinstall OpenCV with GStreamer support.\n",
         };
     }
-    return {};
+    return { };
 }
 
 auto StreamContext::open() noexcept -> std::expected<void, std::string> {
@@ -92,7 +92,7 @@ auto StreamContext::open() noexcept -> std::expected<void, std::string> {
         };
     }
 
-    return {};
+    return { };
 }
 
 auto StreamContext::opened() const noexcept -> bool { return sender_ && sender_->isOpened(); }

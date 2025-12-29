@@ -84,7 +84,7 @@ auto serialize_from(const YAML::Node& yaml) noexcept -> std::expected<void, Seri
     }
 
     // 建立 parent -> child 的映射，存储 transform 数据
-    auto transform_map      = std::map<std::string, std::map<std::string, YAML::Node>> {};
+    auto transform_map      = std::map<std::string, std::map<std::string, YAML::Node>> { };
     auto has_missing_fields = bool { false };
     for (const auto& transform_node : yaml) {
         if (!transform_node["parent"] || !transform_node["child"]) {
@@ -197,7 +197,7 @@ auto serialize_from(const YAML::Node& yaml) noexcept -> std::expected<void, Seri
         return std::unexpected { SerializeTfError::UNMATCHED_LINKS_IN_YAML };
     }
 
-    return {};
+    return { };
 }
 
 template <class Root>

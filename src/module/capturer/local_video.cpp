@@ -54,7 +54,7 @@ struct LocalVideo::Impl {
 
         last_read_time = Clock::now();
 
-        return {};
+        return { };
     }
 
     auto connect() -> std::expected<void, std::string> { return configure(config); }
@@ -84,7 +84,7 @@ struct LocalVideo::Impl {
             last_read_time = config.allow_skipping ? Clock::now() : next_read_time_expected;
         }
 
-        auto frame = cv::Mat {};
+        auto frame = cv::Mat { };
         auto image = std::make_unique<Image>();
         if (!capturer->read(frame)) {
             if (config.loop_play) {

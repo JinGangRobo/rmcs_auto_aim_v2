@@ -124,7 +124,7 @@ struct Joint {
     static constexpr auto find() noexcept {
         using Result = typename Find<query_name, Joint>::Result;
         static_assert(!std::same_as<Result, void>, "没有找到你想要的变换节点");
-        return Result {};
+        return Result { };
     }
 
     template <StaticString query_name>

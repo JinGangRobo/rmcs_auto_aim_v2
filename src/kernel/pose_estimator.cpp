@@ -27,7 +27,7 @@ struct PoseEstimator::Impl {
     };
 
     Config config;
-    PnpSolution pnp_solution {};
+    PnpSolution pnp_solution { };
 
     Printer log { "PoseEstimator" };
 
@@ -51,7 +51,7 @@ struct PoseEstimator::Impl {
                 reshape_array<float, 5, double>(config.distort_coeff);
         }
 
-        return {};
+        return { };
     } catch (const std::exception& e) {
         return std::unexpected { e.what() };
     }
@@ -67,7 +67,7 @@ struct PoseEstimator::Impl {
             }
         };
 
-        auto armors_in_camera = std::vector<Armor3D> {};
+        auto armors_in_camera = std::vector<Armor3D> { };
 
         std::ranges::for_each(armors | std::views::enumerate,
             [&armors_in_camera, &armor_shape, this](auto const& item) {
@@ -85,7 +85,7 @@ struct PoseEstimator::Impl {
                     return;
                 }
 
-                auto armor_3d  = Armor3D {};
+                auto armor_3d  = Armor3D { };
                 armor_3d.genre = pnp_solution.result.genre;
                 armor_3d.color = camp_color2armor_color(pnp_solution.result.color);
                 armor_3d.id    = i;

@@ -40,7 +40,7 @@ AssetsManager assets_manager;
 TEST(model, sync_infer) {
     using namespace rmcs::identifier;
 
-    auto net  = OpenVinoNet {};
+    auto net  = OpenVinoNet { };
     auto yaml = YAML::Load(config);
 
     auto model_location    = location / "../models/yolov5.xml";
@@ -51,7 +51,7 @@ TEST(model, sync_infer) {
 
     const auto image_location = assets_manager.path("model_infer_example.jpg");
 
-    auto image { Image {} };
+    auto image { Image { } };
     image.details().mat = cv::imread(image_location);
     ASSERT_FALSE(image.details().mat.empty())
         << error_head << std::format("Failed to read image from '{}'", image_location.string());

@@ -17,7 +17,7 @@ struct Identifier::Impl {
             }
         }
 
-        return {};
+        return { };
     }
 
     auto identify(const Image& src) noexcept { return armor_detection.sync_detect(src); }

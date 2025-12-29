@@ -23,19 +23,19 @@ auto PnpSolution::solve() -> bool {
             | std::views::transform(
                 [](const Point2d& point) { return point.make<cv::Point2f>(); }));
 
-        auto rota_vec = cv::Vec3d {};
-        auto tran_vec = cv::Vec3d {};
+        auto rota_vec = cv::Vec3d { };
+        auto tran_vec = cv::Vec3d { };
         auto success  = cv::solvePnP(armor_shape, armor_detection, camera_matrix, distort_coeff,
-             rota_vec, tran_vec, false, cv::SOLVEPNP_IPPE);
+            rota_vec, tran_vec, false, cv::SOLVEPNP_IPPE);
 
         if (!success) return false;
 
-        auto tran_vec_eigen_opencv = Eigen::Vector3d {};
+        auto tran_vec_eigen_opencv = Eigen::Vector3d { };
         cv::cv2eigen(tran_vec, tran_vec_eigen_opencv);
 
-        auto rotation_opencv = cv::Mat {};
+        auto rotation_opencv = cv::Mat { };
         cv::Rodrigues(rota_vec, rotation_opencv);
-        auto rotation_eigen_opencv = Eigen::Matrix3d {};
+        auto rotation_eigen_opencv = Eigen::Matrix3d { };
         cv::cv2eigen(rotation_opencv, rotation_eigen_opencv);
 
         result.genre       = input.genre;

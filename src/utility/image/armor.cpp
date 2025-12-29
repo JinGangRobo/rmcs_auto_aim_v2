@@ -19,8 +19,8 @@ auto draw(Image& canvas, const Armor2D& armor) noexcept -> void {
     auto genre = get_enum_name(armor.genre);
     auto shape = get_enum_name(armor.shape);
 
-    auto first    = cv::Point2f {};
-    auto prev     = cv::Point2f {};
+    auto first    = cv::Point2f { };
+    auto prev     = cv::Point2f { };
     auto is_first = true;
 
     for (const auto& point : armor.corners()) {

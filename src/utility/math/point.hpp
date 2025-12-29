@@ -97,7 +97,7 @@ struct Point2d {
     }
     template <class T>
     auto make() const -> T {
-        auto result = T {};
+        auto result = T { };
         return point::details::clone_point2d(*this, result);
     }
 };
@@ -124,7 +124,7 @@ struct Point3d {
     }
     template <class T>
     auto make() const -> T {
-        auto result = T {};
+        auto result = T { };
         return point::details::clone_point3d(*this, result);
     }
 };

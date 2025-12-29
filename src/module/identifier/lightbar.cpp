@@ -19,14 +19,14 @@ auto Lightbar::solve_distance(const Lightbar& o) const noexcept -> double {
 auto LightbarFinder::process(const Image& image) const noexcept -> std::vector<Lightbar> {
     const auto& mat = image.details().mat;
 
-    auto contours = std::vector<std::vector<cv::Point>> {};
+    auto contours = std::vector<std::vector<cv::Point>> { };
     cv::findContours(mat, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);
 
-    auto lightbars = std::vector<Lightbar> {};
+    auto lightbars = std::vector<Lightbar> { };
     for (const auto& contour : contours) {
         auto min_bounding_rect = cv::minAreaRect(contour);
 
-        auto corners = std::array<cv::Point2f, 4> {};
+        auto corners = std::array<cv::Point2f, 4> { };
         min_bounding_rect.points(corners.data());
 
         std::sort(corners.begin(), corners.end(), //

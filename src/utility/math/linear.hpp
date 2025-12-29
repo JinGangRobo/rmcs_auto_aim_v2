@@ -110,7 +110,7 @@ struct Scalar3d {
     }
     template <class T>
     auto make() const -> T {
-        auto result = T {};
+        auto result = T { };
         return linear::details::clone_translation(*this, result);
     }
 };
@@ -142,7 +142,7 @@ struct Orientation {
     }
     template <class T>
     auto make() const -> T {
-        auto result = T {};
+        auto result = T { };
         return linear::details::clone_orientation(*this, result);
     }
 };

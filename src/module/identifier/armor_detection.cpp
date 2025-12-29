@@ -17,9 +17,9 @@ struct ArmorDetection::Impl {
         }
         const auto& raw_results = result.value();
 
-        auto result_armors = std::vector<Armor2D> {};
+        auto result_armors = std::vector<Armor2D> { };
         for (const auto& raw_armor : raw_results) {
-            auto armor  = Armor2D {};
+            auto armor  = Armor2D { };
             armor.genre = raw_armor.armor_genre();
             armor.color = raw_armor.armor_color();
 

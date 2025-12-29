@@ -53,7 +53,7 @@ constexpr auto to_index(DeviceId id) noexcept -> std::size_t {
         case DeviceId::BASE:       return 11;
         // clang-format on
     }
-    return {};
+    return { };
 }
 constexpr auto to_string(DeviceId id) noexcept -> std::string_view {
     switch (id) {
@@ -72,7 +72,7 @@ constexpr auto to_string(DeviceId id) noexcept -> std::string_view {
         case DeviceId::BASE:       return "BASE";
         // clang-format on
     }
-    return {};
+    return { };
 }
 constexpr auto from_index(std::size_t data) noexcept -> DeviceId {
     return (data < id::details::id_underlyings.size())
@@ -83,7 +83,7 @@ constexpr auto from_index(std::size_t data) noexcept -> DeviceId {
 struct DeviceIds {
     uint16_t data = std::to_underlying(DeviceId::UNKNOWN);
 
-    static constexpr auto None() { return DeviceIds {}; }
+    static constexpr auto None() { return DeviceIds { }; }
     static constexpr auto Full() { return DeviceIds { (1 << 11) - 1 }; }
 
     constexpr DeviceIds()                            = default;

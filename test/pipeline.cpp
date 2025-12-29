@@ -25,7 +25,7 @@ TEST(lazy_process, pipeline) {
     using namespace rmcs::pipe;
 
     auto add = Pipe<Add> { 2333 };
-    auto mul = Pipe<MultiplyByTwo> {};
+    auto mul = Pipe<MultiplyByTwo> { };
     auto sub = Pipe<Subtract> { 200 };
 
     auto pipeline = add | mul | sub;

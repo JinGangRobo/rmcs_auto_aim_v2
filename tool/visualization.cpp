@@ -29,7 +29,7 @@ auto main() -> int {
     auto visual = RclcppNode { "example" };
     visual.set_pub_topic_prefix("/rmcs/auto_aim/");
 
-    auto armors = std::array<std::unique_ptr<Armor>, 4> {};
+    auto armors = std::array<std::unique_ptr<Armor>, 4> { };
     {
         auto config = Armor::Config {
             .rclcpp = visual,
@@ -53,7 +53,7 @@ auto main() -> int {
             .tf     = "camera_link",
         });
 
-    auto solution = ArmorsForwardSolution {};
+    auto solution = ArmorsForwardSolution { };
 
     auto start = std::chrono::steady_clock::now();
 

@@ -60,7 +60,7 @@ PnpSolution::Input create_test_input(double fx = 1.722231837421459e+03,
     double k2 = -0.087667493884102, double k3 = 0.792381808294582) {
 
     auto distort_coeff = std::array<double, 5> { k1, k2, 0, 0, k3 };
-    PnpSolution::Input input {};
+    PnpSolution::Input input { };
     input.camera_matrix = { {
         { fx, 0.0, cx },
         { 0.0, fy, cy },
@@ -92,7 +92,7 @@ std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename
         nms_threshold: 0.3
     )";
 
-    auto net  = OpenVinoNet {};
+    auto net  = OpenVinoNet { };
     auto yaml = YAML::Load(config_yaml);
 
     const auto location    = std::filesystem::path { __FILE__ }.parent_path();
@@ -110,7 +110,7 @@ std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename
         throw std::runtime_error("Failed to read image: " + full_path.string());
     }
 
-    auto image          = rmcs::Image {};
+    auto image          = rmcs::Image { };
     image.details().mat = cv_mat;
 
     auto infer_result = net.sync_infer(image);

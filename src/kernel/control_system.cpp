@@ -5,10 +5,10 @@ using namespace rmcs::kernel;
 using namespace rmcs::util;
 
 struct ControlSystem::Impl {
-    AutoAimClient::Send shm_send {};
-    AutoAimClient::Recv shm_recv {};
+    AutoAimClient::Send shm_send { };
+    AutoAimClient::Recv shm_recv { };
 
-    ControlState control_state {};
+    ControlState control_state { };
 
     /// Send
 

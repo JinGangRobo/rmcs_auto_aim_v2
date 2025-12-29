@@ -58,7 +58,7 @@ private:
 
         while (!token.stop_requested()) {
 
-            auto current_frame = cv::Mat {};
+            auto current_frame = cv::Mat { };
             if (buffer.pop(current_frame)) {
                 context->write(current_frame);
             }
@@ -92,7 +92,7 @@ private:
     static auto get_same_subnet_ipv4(std::string_view target_ip_str)
         -> std::expected<std::string, std::string> {
 
-        auto target_addr = in_addr {};
+        auto target_addr = in_addr { };
         if (inet_pton(AF_INET, target_ip_str.data(), &target_addr) != 1) {
             return std::unexpected(std::format("Invalid target IP address: {}", target_ip_str));
         }

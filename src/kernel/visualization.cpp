@@ -57,7 +57,7 @@ struct Visualization::Impl {
     }
 
     auto initialize(const YAML::Node& yaml, RclcppNode& visual_node) noexcept -> NormalResult {
-        auto config = Config {};
+        auto config = Config { };
         auto result = config.serialize(yaml);
         if (!result.has_value()) {
             return std::unexpected { result.error() };
@@ -78,7 +78,7 @@ struct Visualization::Impl {
         armor_visualizer->initialize(visual_node);
 
         is_initialized = true;
-        return {};
+        return { };
     }
 
     auto initialized() const noexcept { return is_initialized; }

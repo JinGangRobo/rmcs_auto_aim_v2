@@ -20,7 +20,7 @@ struct Capturer::Impl {
     std::unique_ptr<Interface> interface;
 
     Printer log { "Capturer" };
-    FramerateCounter loss_image_framerate {};
+    FramerateCounter loss_image_framerate { };
 
     std::chrono::milliseconds reconnect_wait_interval { 500 };
 
@@ -45,12 +45,12 @@ struct Capturer::Impl {
                 instantitation_result = std::unexpected { result.error() };
                 return;
             }
-            instantitation_result = {};
+            instantitation_result = { };
 
             interface = std::move(instance);
         };
 
-        /*  */ if (source == "hikcamera") {
+        /*:)*/ if (source == "hikcamera") {
             system_instantiation.operator()<Hikcamera>(source);
         } else if (source == "local_video") {
             system_instantiation.operator()<LocalVideo>(source);
@@ -74,7 +74,7 @@ struct Capturer::Impl {
         runtime_thread = std::jthread {
             [this](const auto& t) { runtime_task(t); },
         };
-        return {};
+        return { };
 
     } catch (const std::exception& e) {
         return std::unexpected { e.what() };

@@ -32,12 +32,12 @@ int main(int argc, char** argv) {
     auto check = StreamContext::check_support();
     if (!check) node.error("{}", check.error());
 
-    auto config   = StreamSession::Config {};
+    auto config   = StreamSession::Config { };
     config.target = StreamTarget { host, port };
     config.type   = StreamType::RTP_JEPG;
     config.format = VideoFormat { w, h, hz };
 
-    auto stream_session = StreamSession {};
+    auto stream_session = StreamSession { };
     stream_session.set_notifier([&](auto msg) { //
         node.info("[StreamSession] {}", msg);
     });
@@ -63,8 +63,8 @@ int main(int argc, char** argv) {
         node.info("Successfully initialize camera");
     }
 
-    auto once_flag = std::once_flag {};
-    auto framerate = FramerateCounter {};
+    auto once_flag = std::once_flag { };
+    auto framerate = FramerateCounter { };
 
     while (rclcpp::ok()) {
 

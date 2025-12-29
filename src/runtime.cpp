@@ -36,19 +36,19 @@ auto main() -> int {
         }
     };
 
-    auto framerate = FramerateCounter {};
+    auto framerate = FramerateCounter { };
     framerate.set_interval(5s);
 
     /// Runtime
     ///
-    auto capturer       = kernel::Capturer {};
-    auto identifier     = kernel::Identifier {};
-    auto pose_estimator = kernel::PoseEstimator {};
-    auto visualization  = kernel::Visualization {};
+    auto capturer       = kernel::Capturer { };
+    auto identifier     = kernel::Identifier { };
+    auto pose_estimator = kernel::PoseEstimator { };
+    auto visualization  = kernel::Visualization { };
 
-    auto control_system = kernel::ControlSystem {};
+    auto control_system = kernel::ControlSystem { };
 
-    auto shm_sender = shm::Client<util::AutoAimState>::Send {};
+    auto shm_sender = shm::Client<util::AutoAimState>::Send { };
 
     /// Configure
     ///
@@ -128,12 +128,12 @@ auto main() -> int {
                 if (!armors_3d->empty()) {
                     // 选择第一个目标
                     const auto& target = (*armors_3d)[0];
-                    
+
                     // 存储结果到共享内存
                     state.should_control = true;
-                    state.target_posture = target.translation; 
+                    state.target_posture = target.translation;
 
-                    rclcpp_node.info("[Runtime] Solved Target: x={:.3f}, y={:.3f}, z={:.3f}", 
+                    rclcpp_node.info("[Runtime] Solved Target: x={:.3f}, y={:.3f}, z={:.3f}",
                         target.translation.x, target.translation.y, target.translation.z);
                 } else {
                     state.should_control = false;

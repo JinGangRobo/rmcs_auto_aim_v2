@@ -73,25 +73,26 @@ private:
         }
 
         if (shm_recv.is_updated()) {
-            auto timestamp = Stamp {};
+            auto timestamp = Stamp { };
 
-            shm_recv.with_read([&](const auto& state) { 
-                timestamp = state.timestamp; 
+            shm_recv.with_read([&](const auto& state) {
+                timestamp = state.timestamp;
 
                 if (state.should_control) {
-                    *auto_aim_control_direction_ = state.target_posture.template make<Eigen::Vector3d>();
+                    *auto_aim_control_direction_ =
+                        state.target_posture.template make<Eigen::Vector3d>();
                     *auto_aim_debug_x_ = state.target_posture.x;
                     *auto_aim_debug_y_ = state.target_posture.y;
                     *auto_aim_debug_z_ = state.target_posture.z;
 
-                    rclcpp.info("[Component] Recv Target: x={:.3f}, y={:.3f}, z={:.3f}", 
+                    rclcpp.info("[Component] Recv Target: x={:.3f}, y={:.3f}, z={:.3f}",
                         state.target_posture.x, state.target_posture.y, state.target_posture.z);
 
                 } else {
                     *auto_aim_control_direction_ = Eigen::Vector3d::Zero();
-                    *auto_aim_debug_x_ = 0.0;
-                    *auto_aim_debug_y_ = 0.0;
-                    *auto_aim_debug_z_ = 0.0;
+                    *auto_aim_debug_x_           = 0.0;
+                    *auto_aim_debug_y_           = 0.0;
+                    *auto_aim_debug_z_           = 0.0;
                 }
             });
 

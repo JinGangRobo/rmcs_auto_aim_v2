@@ -15,7 +15,7 @@ auto main() -> int {
         .exposure_us = 1'500,
         // ...
     };
-    auto camera = hikcamera::Camera {};
+    auto camera = hikcamera::Camera { };
     camera.configure(config);
 
     if (auto result = camera.connect()) {
