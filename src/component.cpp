@@ -1,9 +1,12 @@
 #include "kernel/feishu.hpp"
 #include "module/debug/framerate.hpp"
+#include "utility/clock.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/visual/transform.hpp"
 #include "utility/shared/context.hpp"
 
+#include <rclcpp/logger.hpp>
+#include <rclcpp/logging.hpp>
 #include <rmcs_description/tf_description.hpp>
 #include <rmcs_executor/component.hpp>
 
@@ -18,6 +21,10 @@ public:
         : rclcpp { get_component_name() } {
 
         register_input("/tf", rmcs_tf);
+        register_output("/gimbal/auto_aim/control_direction", auto_aim_control_direction_);
+        register_output("/debug/aim/x", debug_aim_x);
+        register_output("/debug/aim/y", debug_aim_y);
+        register_output("/debug/aim/z", debug_aim_z);
 
         using namespace std::chrono_literals;
         framerate.set_interval(2s);
@@ -29,6 +36,8 @@ public:
             .child_frame  = "camera_link",              // 子坐标系
         };
         visual_odom_to_camera = std::make_unique<visual::Transform>(config);
+
+        last_valid_aim_time = Clock::now();
     }
 
     auto update() -> void override {
@@ -66,11 +75,40 @@ public:
 
         if (feishu.updated()) {
             auto_aim_state = feishu.fetch();
+
+            Eigen::Vector3d control_direction;
+            control_direction.x() = auto_aim_state.x;
+            control_direction.y() = auto_aim_state.y;
+            control_direction.z() = auto_aim_state.z;
+
+            using namespace std::chrono_literals;
+            if (!control_direction.isZero()) {
+                last_valid_aim_time = Clock::now();
+                control_direction.normalize();
+                *auto_aim_control_direction_ = control_direction;
+                // FOR DEBUG
+                *debug_aim_x                 = control_direction.x();
+                *debug_aim_y                 = control_direction.y();
+                *debug_aim_z                 = control_direction.z();
+            } else {
+                if (Clock::now() - last_valid_aim_time > 1000ms) {
+                    control_direction.setZero();
+                    *auto_aim_control_direction_ = control_direction;
+                    // FOR DEBUG
+                    *debug_aim_x                 = control_direction.x();
+                    *debug_aim_y                 = control_direction.y();
+                    *debug_aim_z                 = control_direction.z();
+                }
+            }
         }
     }
 
 private:
     InputInterface<rmcs_description::Tf> rmcs_tf;
+    OutputInterface<Eigen::Vector3d> auto_aim_control_direction_;
+    OutputInterface<double> debug_aim_x;
+    OutputInterface<double> debug_aim_y;
+    OutputInterface<double> debug_aim_z;
 
     RclcppNode rclcpp;
     std::unique_ptr<visual::Transform> visual_odom_to_camera;
@@ -78,6 +116,7 @@ private:
     Feishu<RuntimeRole::Control> feishu;
     ControlState control_state;
     AutoAimState auto_aim_state;
+    Clock::time_point last_valid_aim_time;
 
     FramerateCounter framerate;
 

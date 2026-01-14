@@ -25,8 +25,10 @@ struct AutoAimState {
     bool should_control { false };
     bool should_shoot = { false };
 
-    double yaw { 0 };
-    double pitch { 0 };
+    // In Odom frame, where gimbal should aim at
+    double x { 0 };
+    double y { 0 };
+    double z { 0 };
 
     DeviceId target { DeviceId::UNKNOWN };
 };

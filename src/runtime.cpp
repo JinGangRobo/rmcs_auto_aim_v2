@@ -12,6 +12,7 @@
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
+#include "utility/shared/context.hpp"
 #include "utility/singleton/running.hpp"
 
 #include <csignal>
@@ -38,18 +39,21 @@ auto main() -> int {
         }
     };
 
-    auto framerate = FramerateCounter {};
+    auto framerate = FramerateCounter { };
     framerate.set_interval(5s);
 
     /// Runtime
-    auto feishu         = kernel::Feishu<RuntimeRole::AutoAim> {};
-    auto capturer       = kernel::Capturer {};
-    auto identifier     = kernel::Identifier {};
-    auto tracker        = kernel::Tracker {};
-    auto pose_estimator = kernel::PoseEstimator {};
-    auto visualization  = kernel::Visualization {};
+    auto feishu         = kernel::Feishu<RuntimeRole::AutoAim> { };
+    auto capturer       = kernel::Capturer { };
+    auto identifier     = kernel::Identifier { };
+    auto tracker        = kernel::Tracker { };
+    auto pose_estimator = kernel::PoseEstimator { };
+    auto visualization  = kernel::Visualization { };
 
     auto log_limiter = util::LogLimiter { 3 };
+
+    AutoAimState auto_aim_state;
+    bool workflow_valid = false;
 
     /// Configure
     auto configuration     = util::configuration();
@@ -104,8 +108,19 @@ auto main() -> int {
 
         rclcpp_node.spin_once();
 
+        if (workflow_valid) {
+            feishu.commit(auto_aim_state);
+            workflow_valid = false;
+        } else {
+            auto_aim_state.timestamp = Clock::now();
+            auto_aim_state.x         = 0.0;
+            auto_aim_state.y         = 0.0;
+            auto_aim_state.z         = 0.0;
+            feishu.commit(auto_aim_state);
+        }
+
         if (auto image = capturer.fetch_image()) {
-            auto control_state = ControlState {};
+            auto control_state = ControlState { };
 
             if (is_local_runtime) {
                 control_state.set_identity();
@@ -171,10 +186,29 @@ auto main() -> int {
 
             if (!snapshot_opt) continue;
 
-            auto const& snapshot = *snapshot_opt;
+            auto const& snapshot  = *snapshot_opt;
+            auto predicted_armors = snapshot.predicted_armors(Clock::now());
+
+            if (predicted_armors.empty()) continue;
+
+            auto selected_armor_opt = std::min_element(predicted_armors.begin(),
+                predicted_armors.end(), [&](const auto& a, const auto& b) {
+                    auto distance_a = std::sqrt(a.translation.x * a.translation.x
+                        + a.translation.y * a.translation.y + a.translation.z * a.translation.z);
+                    auto distance_b = std::sqrt(b.translation.x * b.translation.x
+                        + b.translation.y * b.translation.y + b.translation.z * b.translation.z);
+                    return distance_a < distance_b;
+                });
+
+            auto_aim_state.timestamp = Clock::now();
+            auto_aim_state.x         = selected_armor_opt->translation.x;
+            auto_aim_state.y         = selected_armor_opt->translation.y;
+            auto_aim_state.z         = selected_armor_opt->translation.z;
+
+            workflow_valid = true;
 
             if (visualization.initialized()) {
-                visualization.predicted_armors(snapshot.predicted_armors(Clock::now()));
+                visualization.predicted_armors(predicted_armors);
             }
 
         } // image receive scope
