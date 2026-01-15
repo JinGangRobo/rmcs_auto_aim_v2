@@ -30,6 +30,7 @@ public:
         using namespace std::chrono_literals;
         framerate.set_interval(2s);
 
+        // TODO: What is that?
         visual::Transform::Config config {
             .rclcpp       = rclcpp,                     // 当前组件持有的 RclcppNode
             .topic        = "odom_to_camera_transform", // 发布的 topic 名
@@ -38,7 +39,8 @@ public:
         };
         visual_odom_to_camera = std::make_unique<visual::Transform>(config);
 
-        last_valid_aim_time = Clock::now();
+        last_valid_aim_time          = Clock::now();
+        *auto_aim_control_direction_ = Eigen::Vector3d::Zero();
     }
 
     auto update() -> void override {
@@ -77,15 +79,16 @@ public:
         if (feishu.updated()) {
             auto_aim_state = feishu.fetch();
 
+            // timestamp check
+            if ((Clock::now() - auto_aim_state.timestamp) < std::chrono::milliseconds(0)
+                || (Clock::now() - auto_aim_state.timestamp) > std::chrono::milliseconds(100))
+                return;
+
             Eigen::Vector3d control_direction;
             control_direction.x() = auto_aim_state.x;
             control_direction.y() = auto_aim_state.y;
             control_direction.z() = auto_aim_state.z;
 
-            control_direction =
-                Eigen::AngleAxisd { yaw_aim_offset, Eigen::Vector3d::UnitZ() } * control_direction;
-
-            using namespace std::chrono_literals;
             if (!control_direction.isZero()) {
                 auto time_diff = Clock::now() - last_valid_aim_time;
                 *aim_delay_ms =
@@ -94,19 +97,23 @@ public:
 
                 last_valid_aim_time = Clock::now();
 
+                control_direction = Eigen::AngleAxisd { yaw_aim_offset, Eigen::Vector3d::UnitZ() }
+                    * control_direction;
+
                 control_direction.normalize();
                 *auto_aim_control_direction_ = control_direction;
                 // FOR DEBUG
                 *debug_aim_x = control_direction.x();
                 *debug_aim_y = control_direction.y();
                 *debug_aim_z = control_direction.z();
-            } else {
-                control_direction.setZero();
-                *auto_aim_control_direction_ = control_direction;
+            }
+        } else {
+            if (Clock::now() - last_valid_aim_time > std::chrono::milliseconds(200)) {
+                *auto_aim_control_direction_ = Eigen::Vector3d::Zero();
                 // FOR DEBUG
-                *debug_aim_x = control_direction.x();
-                *debug_aim_y = control_direction.y();
-                *debug_aim_z = control_direction.z();
+                *debug_aim_x = 0.0;
+                *debug_aim_y = 0.0;
+                *debug_aim_z = 0.0;
             }
         }
     }

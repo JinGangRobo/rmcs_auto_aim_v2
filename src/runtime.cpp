@@ -54,7 +54,6 @@ auto main() -> int {
     auto log_limiter = util::LogLimiter { 3 };
 
     AutoAimState auto_aim_state;
-    bool workflow_valid = false;
 
     /// Configure
     auto configuration     = util::configuration();
@@ -108,18 +107,6 @@ auto main() -> int {
             break;
 
         rclcpp_node.spin_once();
-
-        using namespace std::chrono_literals;
-        if (workflow_valid) {
-            feishu.commit(auto_aim_state);
-            workflow_valid = false;
-        } else if (Clock::now() - auto_aim_state.timestamp > 500ms) {
-            auto_aim_state.timestamp = Clock::now();
-            auto_aim_state.x         = 0.0;
-            auto_aim_state.y         = 0.0;
-            auto_aim_state.z         = 0.0;
-            feishu.commit(auto_aim_state);
-        }
 
         if (auto image = capturer.fetch_image()) {
             auto control_state = ControlState { };
@@ -226,7 +213,7 @@ auto main() -> int {
             auto_aim_state.y         = selected_armor_opt->translation.y;
             auto_aim_state.z         = selected_armor_opt->translation.z;
 
-            workflow_valid = true;
+            feishu.commit(auto_aim_state);
 
         } // image receive scope
 
