@@ -130,6 +130,11 @@ struct Visualization::Impl {
         return armor_visualizer->visualize(armors, "solved_pnp_armors", "camera_link");
     }
 
+    auto odom_pnp_armors(std::span<Armor3D const> armors) const -> bool {
+        if (!is_initialized) return false;
+        return armor_visualizer->visualize(armors, "odom_pnp_armors", "odom_imu_link");
+    }
+
     auto predicted_armors(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
         return armor_visualizer->visualize(armors, "predicted_armors", "odom_imu_link");
@@ -149,6 +154,9 @@ auto Visualization::send_image(const Image& image) noexcept -> bool {
 
 auto Visualization::solved_pnp_armors(std::span<Armor3D const> armors) const -> bool {
     return pimpl->solved_pnp_armors(armors);
+}
+auto Visualization::odom_pnp_armors(std::span<Armor3D const> armors) const -> bool {
+    return pimpl->odom_pnp_armors(armors);
 }
 auto Visualization::predicted_armors(std::span<Armor3D const> armors) const -> bool {
     return pimpl->predicted_armors(armors);

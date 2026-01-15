@@ -27,6 +27,7 @@ public:
     auto send_image(const Image& image) noexcept -> bool;
 
     auto solved_pnp_armors(std::span<Armor3D const> armors) const -> bool;
+    auto odom_pnp_armors(std::span<Armor3D const> armors) const -> bool;
     auto predicted_armors(std::span<Armor3D const> armors) const -> bool;
 };
 

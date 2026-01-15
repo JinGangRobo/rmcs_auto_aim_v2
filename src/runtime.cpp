@@ -7,6 +7,7 @@
 
 #include "module/debug/framerate.hpp"
 #include "module/debug/log_limiter.hpp"
+#include "utility/clock.hpp"
 #include "utility/image/armor.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
@@ -108,10 +109,11 @@ auto main() -> int {
 
         rclcpp_node.spin_once();
 
+        using namespace std::chrono_literals;
         if (workflow_valid) {
             feishu.commit(auto_aim_state);
             workflow_valid = false;
-        } else {
+        } else if (Clock::now() - auto_aim_state.timestamp > 500ms) {
             auto_aim_state.timestamp = Clock::now();
             auto_aim_state.x         = 0.0;
             auto_aim_state.y         = 0.0;
@@ -160,14 +162,16 @@ auto main() -> int {
 
             auto armors_3d_opt = pose_estimator.solve_pnp(filtered_armors_2d);
 
-            if (!armors_3d_opt.has_value()) continue;
+            if (!armors_3d_opt.has_value()) {
+                continue;
+            }
 
             if (visualization.initialized()) {
                 auto success = visualization.solved_pnp_armors(*armors_3d_opt);
 
                 if (!success) {
                     if (log_limiter.tick("visualization_pnp_failed")) {
-                        rclcpp_node.error("可视化PNP结算后的装甲板失败");
+                        rclcpp_node.error("可视化PNP解算后的装甲板失败");
                     } else if (log_limiter.enabled("visualization_pnp_failed")) {
                         rclcpp_node.error("Stop printing visualization errors");
                     }
@@ -179,20 +183,37 @@ auto main() -> int {
             pose_estimator.set_odom_to_camera_transform(control_state.odom_to_camera_transform);
             auto armors_3d = pose_estimator.odom_to_camera(*armors_3d_opt);
 
+            if (visualization.initialized()) visualization.odom_pnp_armors(armors_3d);
+
             auto [tracker_state, target_device, snapshot_opt] =
                 tracker.decide(armors_3d, Clock::now());
 
-            if (tracker_state != TrackerState::Tracking) continue;
+            std::vector<Armor3D> result_armors;
 
-            if (!snapshot_opt) continue;
+            if (tracker_state == TrackerState::Tracking) {
+                if (!snapshot_opt) {
+                    continue;
+                }
 
-            auto const& snapshot  = *snapshot_opt;
-            auto predicted_armors = snapshot.predicted_armors(Clock::now());
+                auto const& snapshot = *snapshot_opt;
+                result_armors        = snapshot.predicted_armors(Clock::now());
+                // result_armors = armors_3d;
 
-            if (predicted_armors.empty()) continue;
+                if (visualization.initialized()) visualization.predicted_armors(result_armors);
 
-            auto selected_armor_opt = std::min_element(predicted_armors.begin(),
-                predicted_armors.end(), [&](const auto& a, const auto& b) {
+            } else if (tracker_state == TrackerState::Detecting) {
+                // Fallback to the closest armor
+                result_armors = armors_3d;
+            } else {
+                continue;
+            };
+
+            if (result_armors.empty()) {
+                continue;
+            }
+
+            auto selected_armor_opt = std::min_element(
+                result_armors.begin(), result_armors.end(), [&](const auto& a, const auto& b) {
                     auto distance_a = std::sqrt(a.translation.x * a.translation.x
                         + a.translation.y * a.translation.y + a.translation.z * a.translation.z);
                     auto distance_b = std::sqrt(b.translation.x * b.translation.x
@@ -206,10 +227,6 @@ auto main() -> int {
             auto_aim_state.z         = selected_armor_opt->translation.z;
 
             workflow_valid = true;
-
-            if (visualization.initialized()) {
-                visualization.predicted_armors(predicted_armors);
-            }
 
         } // image receive scope
 

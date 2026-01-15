@@ -4,7 +4,7 @@
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/visual/transform.hpp"
 #include "utility/shared/context.hpp"
-
+#include <eigen3/Eigen/Dense>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
 #include <rmcs_description/tf_description.hpp>
@@ -25,6 +25,7 @@ public:
         register_output("/debug/aim/x", debug_aim_x);
         register_output("/debug/aim/y", debug_aim_y);
         register_output("/debug/aim/z", debug_aim_z);
+        register_output("/debug/aim/delay", aim_delay_ms);
 
         using namespace std::chrono_literals;
         framerate.set_interval(2s);
@@ -81,24 +82,31 @@ public:
             control_direction.y() = auto_aim_state.y;
             control_direction.z() = auto_aim_state.z;
 
+            control_direction =
+                Eigen::AngleAxisd { yaw_aim_offset, Eigen::Vector3d::UnitZ() } * control_direction;
+
             using namespace std::chrono_literals;
             if (!control_direction.isZero()) {
+                auto time_diff = Clock::now() - last_valid_aim_time;
+                *aim_delay_ms =
+                    std::chrono::duration_cast<std::chrono::microseconds>(time_diff).count()
+                    / 1000.0;
+
                 last_valid_aim_time = Clock::now();
+
                 control_direction.normalize();
                 *auto_aim_control_direction_ = control_direction;
                 // FOR DEBUG
-                *debug_aim_x                 = control_direction.x();
-                *debug_aim_y                 = control_direction.y();
-                *debug_aim_z                 = control_direction.z();
+                *debug_aim_x = control_direction.x();
+                *debug_aim_y = control_direction.y();
+                *debug_aim_z = control_direction.z();
             } else {
-                if (Clock::now() - last_valid_aim_time > 1000ms) {
-                    control_direction.setZero();
-                    *auto_aim_control_direction_ = control_direction;
-                    // FOR DEBUG
-                    *debug_aim_x                 = control_direction.x();
-                    *debug_aim_y                 = control_direction.y();
-                    *debug_aim_z                 = control_direction.z();
-                }
+                control_direction.setZero();
+                *auto_aim_control_direction_ = control_direction;
+                // FOR DEBUG
+                *debug_aim_x = control_direction.x();
+                *debug_aim_y = control_direction.y();
+                *debug_aim_z = control_direction.z();
             }
         }
     }
@@ -109,6 +117,10 @@ private:
     OutputInterface<double> debug_aim_x;
     OutputInterface<double> debug_aim_y;
     OutputInterface<double> debug_aim_z;
+    OutputInterface<double> aim_delay_ms;
+
+    // TODO: Move it to config file
+    static constexpr double yaw_aim_offset = -0.1;
 
     RclcppNode rclcpp;
     std::unique_ptr<visual::Transform> visual_odom_to_camera;
