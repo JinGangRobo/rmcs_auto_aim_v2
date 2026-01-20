@@ -1,4 +1,4 @@
-use_visualization: true
+use_visualization: false
 use_painted_image: true
 is_local_runtime: false
 
