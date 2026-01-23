@@ -30,7 +30,6 @@ public:
         using namespace std::chrono_literals;
         framerate.set_interval(2s);
 
-        // TODO: What is that?
         visual::Transform::Config config {
             .rclcpp       = rclcpp,                     // 当前组件持有的 RclcppNode
             .topic        = "odom_to_camera_transform", // 发布的 topic 名

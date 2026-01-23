@@ -24,21 +24,30 @@ struct Decider::Impl {
             if (!trackers.contains(id)) {
                 trackers[id] = std::make_unique<RobotState>();
                 trackers[id]->initialize(armor, t);
+                coverged_fail_count[id] = 0;
             }
 
             // RobotState 内部会调用 match() 自动处理多装甲板逻辑
             trackers[id]->update(armor);
-            last_seen_time[id] = t;
+
+            if (trackers[id]->is_converged()) {
+                last_seen_time[id]      = t;
+                coverged_fail_count[id] = 0;
+            } else {
+                last_seen_time[id] = t;
+                coverged_fail_count[id]++;
+            }
         }
 
         std::erase_if(trackers, [&](const auto& item) {
             bool expired = util::delta_time(t, last_seen_time[item.first]) > cleanup_interval;
-            if (expired) {
+            bool invalid = coverged_fail_count[item.first] > max_coverged_fail_count;
+            if (expired || invalid) {
                 if (item.first == primary_target_id) primary_target_id = DeviceId::UNKNOWN;
                 last_seen_time.erase(item.first);
             }
 
-            return expired;
+            return expired || invalid;
         });
 
         primary_target_id = arbitrate(t);
@@ -65,7 +74,7 @@ struct Decider::Impl {
 
         if (std::ranges::empty(candidates)) return DeviceId::UNKNOWN;
 
-        auto it = std::ranges::max_element(candidates, {},
+        auto it = std::ranges::max_element(candidates, { },
             [&](const auto& pair) { return calculate_score(pair.first, *pair.second); });
 
         return it->first;
@@ -95,9 +104,11 @@ struct Decider::Impl {
     DeviceId primary_target_id { DeviceId::UNKNOWN };
     std::unordered_map<DeviceId, std::unique_ptr<RobotState>> trackers;
     std::unordered_map<DeviceId, Clock::time_point> last_seen_time;
+    std::unordered_map<DeviceId, int> coverged_fail_count;
 
     PriorityMode priority_mode;
 
+    int max_coverged_fail_count { 80 };
     std::chrono::duration<double> cleanup_interval { 500ms };
     std::chrono::duration<double> active_interval { 100ms };
 

@@ -178,22 +178,17 @@ auto main() -> int {
             std::vector<Armor3D> result_armors;
 
             if (tracker_state == TrackerState::Tracking) {
-                if (!snapshot_opt) {
-                    continue;
-                }
+                if (!snapshot_opt) continue;
 
                 auto const& snapshot = *snapshot_opt;
                 result_armors        = snapshot.predicted_armors(Clock::now());
-                // result_armors = armors_3d;
 
                 if (visualization.initialized()) visualization.predicted_armors(result_armors);
 
             } else if (tracker_state == TrackerState::Detecting) {
                 // Fallback to the closest armor
                 result_armors = armors_3d;
-            } else {
-                continue;
-            };
+            } else continue;
 
             if (result_armors.empty()) {
                 continue;
