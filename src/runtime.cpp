@@ -181,7 +181,10 @@ auto main() -> int {
                 if (!snapshot_opt) continue;
 
                 auto const& snapshot = *snapshot_opt;
-                result_armors        = snapshot.predicted_armors(Clock::now());
+
+                // TODO: 这里的预测时间临时用了100ms, 但实际上应该是系统响应延时+子弹飞行时间
+                result_armors =
+                    snapshot.predicted_armors(Clock::now() + std::chrono::milliseconds(100));
 
                 if (visualization.initialized()) visualization.predicted_armors(result_armors);
 
