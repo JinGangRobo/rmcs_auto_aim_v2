@@ -5,6 +5,8 @@
 #include "utility/rclcpp/visual/transform.hpp"
 #include "utility/shared/context.hpp"
 #include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/src/Core/Matrix.h>
+#include <memory>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
 #include <rmcs_description/tf_description.hpp>
@@ -22,6 +24,7 @@ public:
 
         register_input("/tf", rmcs_tf);
         register_output("/gimbal/auto_aim/control_direction", auto_aim_control_direction_);
+        register_output("/gimbal/auto_aim/target_position", auto_aim_target_position_);
         register_output("/debug/aim/x", debug_aim_x);
         register_output("/debug/aim/y", debug_aim_y);
         register_output("/debug/aim/z", debug_aim_z);
@@ -30,13 +33,21 @@ public:
         using namespace std::chrono_literals;
         framerate.set_interval(2s);
 
-        visual::Transform::Config config {
+        visual::Transform::Config odom_to_camera_visual_config {
             .rclcpp       = rclcpp,                     // 当前组件持有的 RclcppNode
             .topic        = "odom_to_camera_transform", // 发布的 topic 名
             .parent_frame = "odom_imu_link",            // 父坐标系
             .child_frame  = "camera_link",              // 子坐标系
         };
-        visual_odom_to_camera = std::make_unique<visual::Transform>(config);
+        visual_odom_to_camera = std::make_unique<visual::Transform>(odom_to_camera_visual_config);
+
+        visual::Transform::Config base_to_camera_visual_config {
+            .rclcpp       = rclcpp,
+            .topic        = "base_to_camera_transform",
+            .parent_frame = "camera_link",
+            .child_frame  = "base_link",
+        };
+        visual_base_to_camera = std::make_unique<visual::Transform>(base_to_camera_visual_config);
 
         last_valid_aim_time          = Clock::now();
         *auto_aim_control_direction_ = Eigen::Vector3d::Zero();
@@ -51,6 +62,7 @@ public:
         {
             control_state.timestamp = Clock::now();
 
+            // update odom to camera transform
             auto odom_to_camera_transform =
                 fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::CameraLink>(
                     *rmcs_tf);
@@ -60,9 +72,23 @@ public:
             control_state.odom_to_camera_transform.orientation =
                 Eigen::Quaterniond(odom_to_camera_transform.rotation());
 
+            // update camera to base transform
+            auto base_to_camera_transform =
+                fast_tf::lookup_transform<rmcs_description::BaseLink, rmcs_description::CameraLink>(
+                    *rmcs_tf);
+            control_state.base_to_camera_transform.position =
+                base_to_camera_transform.translation();
+            control_state.base_to_camera_transform.orientation =
+                Eigen::Quaterniond(base_to_camera_transform.rotation());
+
+            // send transform to topic for visualization
             visual_odom_to_camera->move(control_state.odom_to_camera_transform.position,
                 control_state.odom_to_camera_transform.orientation);
             visual_odom_to_camera->update();
+
+            visual_base_to_camera->move(base_to_camera_transform.translation(),
+                Eigen::Quaterniond(base_to_camera_transform.rotation()));
+            visual_base_to_camera->update();
 
             // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
             control_state.invincible_devices = DeviceIds::None();
@@ -84,9 +110,9 @@ public:
                 return;
 
             Eigen::Vector3d control_direction;
-            control_direction.x() = auto_aim_state.x;
-            control_direction.y() = auto_aim_state.y;
-            control_direction.z() = auto_aim_state.z;
+            control_direction.x() = auto_aim_state.target_direction[0];
+            control_direction.y() = auto_aim_state.target_direction[1];
+            control_direction.z() = auto_aim_state.target_direction[2];
 
             if (!control_direction.isZero()) {
                 auto time_diff = Clock::now() - last_valid_aim_time;
@@ -101,6 +127,13 @@ public:
 
                 control_direction.normalize();
                 *auto_aim_control_direction_ = control_direction;
+
+                Eigen::Vector3d target_position;
+                target_position.x()        = auto_aim_state.target_position[0];
+                target_position.y()        = auto_aim_state.target_position[1];
+                target_position.z()        = auto_aim_state.target_position[2];
+                *auto_aim_target_position_ = target_position;
+
                 // FOR DEBUG
                 *debug_aim_x = control_direction.x();
                 *debug_aim_y = control_direction.y();
@@ -109,6 +142,7 @@ public:
         } else {
             if (Clock::now() - last_valid_aim_time > std::chrono::milliseconds(200)) {
                 *auto_aim_control_direction_ = Eigen::Vector3d::Zero();
+                *auto_aim_target_position_   = Eigen::Vector3d::Zero();
                 // FOR DEBUG
                 *debug_aim_x = 0.0;
                 *debug_aim_y = 0.0;
@@ -120,6 +154,7 @@ public:
 private:
     InputInterface<rmcs_description::Tf> rmcs_tf;
     OutputInterface<Eigen::Vector3d> auto_aim_control_direction_;
+    OutputInterface<Eigen::Vector3d> auto_aim_target_position_;
     OutputInterface<double> debug_aim_x;
     OutputInterface<double> debug_aim_y;
     OutputInterface<double> debug_aim_z;
@@ -130,6 +165,7 @@ private:
 
     RclcppNode rclcpp;
     std::unique_ptr<visual::Transform> visual_odom_to_camera;
+    std::unique_ptr<visual::Transform> visual_base_to_camera;
 
     Feishu<RuntimeRole::Control> feishu;
     ControlState control_state;

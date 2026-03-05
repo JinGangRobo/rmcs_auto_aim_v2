@@ -22,15 +22,11 @@ struct Transform {
 struct AutoAimState {
     Clock::time_point timestamp { };
 
-    bool should_control { false };
-    bool should_shoot = { false };
-
     // In Odom frame, where gimbal should aim at
-    double x { 0 };
-    double y { 0 };
-    double z { 0 };
+    double target_direction[3] { 0, 0, 0 };
 
-    DeviceId target { DeviceId::UNKNOWN };
+    // In Base frame, where target enemy at
+    double target_position[3] { 0, 0, 0 };
 };
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
 
@@ -43,6 +39,7 @@ struct ControlState {
     DeviceIds invincible_devices { DeviceIds::None() };
 
     Transform odom_to_camera_transform { };
+    Transform base_to_camera_transform { };
 
     auto set_identity() noexcept -> void {
         timestamp                = Clock::now();
@@ -50,6 +47,7 @@ struct ControlState {
         bullet_speed             = 0.0;
         invincible_devices       = DeviceIds::None();
         odom_to_camera_transform = { };
+        base_to_camera_transform = { };
     }
 };
 static_assert(std::is_trivially_copyable_v<ControlState>);

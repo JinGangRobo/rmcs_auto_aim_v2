@@ -13,6 +13,7 @@
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
+#include "utility/robot/id.hpp"
 #include "utility/shared/context.hpp"
 #include "utility/singleton/running.hpp"
 
@@ -168,7 +169,9 @@ auto main() -> int {
             }
 
             pose_estimator.set_odom_to_camera_transform(control_state.odom_to_camera_transform);
-            auto armors_3d = pose_estimator.odom_to_camera(*armors_3d_opt);
+            pose_estimator.set_base_to_camera_transform(control_state.base_to_camera_transform);
+            auto armors_3d      = pose_estimator.odom_to_camera(*armors_3d_opt);
+            auto armors_3d_base = pose_estimator.base_to_camera(*armors_3d_opt);
 
             if (visualization.initialized()) visualization.odom_pnp_armors(armors_3d);
 
@@ -197,7 +200,7 @@ auto main() -> int {
                 continue;
             }
 
-            auto selected_armor_opt = std::min_element(
+            auto selected_armor = std::min_element(
                 result_armors.begin(), result_armors.end(), [&](const auto& a, const auto& b) {
                     auto distance_a = std::sqrt(a.translation.x * a.translation.x
                         + a.translation.y * a.translation.y + a.translation.z * a.translation.z);
@@ -206,10 +209,19 @@ auto main() -> int {
                     return distance_a < distance_b;
                 });
 
-            auto_aim_state.timestamp = Clock::now();
-            auto_aim_state.x         = selected_armor_opt->translation.x;
-            auto_aim_state.y         = selected_armor_opt->translation.y;
-            auto_aim_state.z         = selected_armor_opt->translation.z;
+            auto_aim_state.timestamp           = Clock::now();
+            auto_aim_state.target_direction[0] = selected_armor->translation.x;
+            auto_aim_state.target_direction[1] = selected_armor->translation.y;
+            auto_aim_state.target_direction[2] = selected_armor->translation.z;
+
+            for (auto armor : armors_3d_base) {
+                if (armor.genre == target_device) {
+                    auto_aim_state.target_position[0] = armor.translation.x;
+                    auto_aim_state.target_position[1] = armor.translation.y;
+                    auto_aim_state.target_position[2] = armor.translation.z;
+                    break;
+                }
+            }
 
             feishu.commit(auto_aim_state);
 
