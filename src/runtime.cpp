@@ -222,6 +222,13 @@ auto main() -> int {
                     break;
                 }
             }
+            for (auto armor : filtered_armors_2d) {
+                if (armor.genre == target_device) {
+                    // TODO: use parameter instead of hardcoded value
+                    auto_aim_state.selected_scan_direction = armor.bl.x < 240 ? 1 : -1;
+                    break;
+                }
+            }
 
             feishu.commit(auto_aim_state);
 

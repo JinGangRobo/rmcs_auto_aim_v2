@@ -25,6 +25,7 @@ public:
         register_input("/tf", rmcs_tf);
         register_output("/gimbal/auto_aim/control_direction", auto_aim_control_direction_);
         register_output("/gimbal/auto_aim/target_position", auto_aim_target_position_);
+        register_output("/gimbal/auto_aim/scan_direction", auto_aim_scan_direction_);
         register_output("/debug/aim/x", debug_aim_x);
         register_output("/debug/aim/y", debug_aim_y);
         register_output("/debug/aim/z", debug_aim_z);
@@ -133,6 +134,7 @@ public:
                 target_position.y()        = auto_aim_state.target_position[1];
                 target_position.z()        = auto_aim_state.target_position[2];
                 *auto_aim_target_position_ = target_position;
+                *auto_aim_scan_direction_  = auto_aim_state.selected_scan_direction;
 
                 // FOR DEBUG
                 *debug_aim_x = control_direction.x();
@@ -155,6 +157,7 @@ private:
     InputInterface<rmcs_description::Tf> rmcs_tf;
     OutputInterface<Eigen::Vector3d> auto_aim_control_direction_;
     OutputInterface<Eigen::Vector3d> auto_aim_target_position_;
+    OutputInterface<int8_t> auto_aim_scan_direction_;
     OutputInterface<double> debug_aim_x;
     OutputInterface<double> debug_aim_y;
     OutputInterface<double> debug_aim_z;

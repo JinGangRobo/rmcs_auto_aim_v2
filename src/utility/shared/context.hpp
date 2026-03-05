@@ -3,6 +3,7 @@
 #include "utility/clock.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/robot/id.hpp"
+#include <cstdint>
 
 namespace rmcs::util {
 
@@ -22,11 +23,14 @@ struct Transform {
 struct AutoAimState {
     Clock::time_point timestamp { };
 
-    // In Odom frame, where gimbal should aim at
+    // In Odom frame, where gimbal should aim at.
     double target_direction[3] { 0, 0, 0 };
 
-    // In Base frame, where target enemy at
+    // In Base frame, where target enemy at.
     double target_position[3] { 0, 0, 0 };
+
+    // Only used for autopilot.
+    int8_t selected_scan_direction { 0 };
 };
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
 
