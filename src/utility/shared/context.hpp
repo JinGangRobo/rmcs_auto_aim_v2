@@ -23,14 +23,22 @@ struct Transform {
 struct AutoAimState {
     Clock::time_point timestamp { };
 
-    // In Odom frame, where gimbal should aim at.
-    double target_direction[3] { 0, 0, 0 };
+    bool gimbal_takeover { false };
+    bool shoot_permitted = { false };
 
-    // In Base frame, where target enemy at.
-    double target_position[3] { 0, 0, 0 };
+    double yaw { 0. };
+    double pitch { 0. };
 
-    // Only used for autopilot.
-    int8_t selected_scan_direction { 0 };
+    DeviceId target { DeviceId::UNKNOWN };
+
+    auto set_identity() noexcept -> void {
+        timestamp = Clock::now();
+
+        gimbal_takeover = false;
+        shoot_permitted = false;
+        yaw             = 0.;
+        pitch           = 0.;
+    }
 };
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
 
@@ -38,20 +46,26 @@ struct ControlState {
     Clock::time_point timestamp { };
     ShootMode shoot_mode { ShootMode::BATTLE };
 
-    double bullet_speed { };
+    double bullet_speed { 0. };
+    double yaw { 0. };
+    double pitch { 0. };
 
     DeviceIds invincible_devices { DeviceIds::None() };
 
     Transform odom_to_camera_transform { };
     Transform base_to_camera_transform { };
+    Translation odom_to_muzzle_translation {};
 
     auto set_identity() noexcept -> void {
         timestamp                = Clock::now();
         shoot_mode               = ShootMode::STOPPING;
         bullet_speed             = 0.0;
+        yaw                        = 0.0;
+        pitch                      = 0.0;
         invincible_devices       = DeviceIds::None();
         odom_to_camera_transform = { };
         base_to_camera_transform = { };
+        odom_to_muzzle_translation = {};
     }
 };
 static_assert(std::is_trivially_copyable_v<ControlState>);

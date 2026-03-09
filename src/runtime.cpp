@@ -1,22 +1,22 @@
 #include "kernel/capturer.hpp"
 #include "kernel/feishu.hpp"
+#include "kernel/fire_control.hpp"
 #include "kernel/identifier.hpp"
 #include "kernel/pose_estimator.hpp"
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
 
+#include "module/debug/action_throttler.hpp"
 #include "module/debug/framerate.hpp"
-#include "module/debug/log_limiter.hpp"
-#include "utility/clock.hpp"
+
 #include "utility/image/armor.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
-#include "utility/robot/id.hpp"
-#include "utility/shared/context.hpp"
 #include "utility/singleton/running.hpp"
 
+#include <chrono>
 #include <csignal>
 #include <yaml-cpp/yaml.h>
 
@@ -41,20 +41,19 @@ auto main() -> int {
         }
     };
 
-    auto framerate = FramerateCounter { };
+    auto framerate = FramerateCounter {};
     framerate.set_interval(5s);
 
     /// Runtime
-    auto feishu         = kernel::Feishu<RuntimeRole::AutoAim> { };
-    auto capturer       = kernel::Capturer { };
-    auto identifier     = kernel::Identifier { };
-    auto tracker        = kernel::Tracker { };
-    auto pose_estimator = kernel::PoseEstimator { };
-    auto visualization  = kernel::Visualization { };
+    auto feishu         = kernel::Feishu<RuntimeRole::AutoAim> {};
+    auto capturer       = kernel::Capturer {};
+    auto identifier     = kernel::Identifier {};
+    auto tracker        = kernel::Tracker {};
+    auto pose_estimator = kernel::PoseEstimator {};
+    auto fire_control   = kernel::FireControl {};
+    auto visualization  = kernel::Visualization {};
 
-    auto log_limiter = util::LogLimiter { 3 };
-
-    AutoAimState auto_aim_state;
+    auto action_throttler = util::ActionThrottler { 1s, 233 };
 
     /// Configure
     auto configuration     = util::configuration();
@@ -91,6 +90,12 @@ auto main() -> int {
         auto result = pose_estimator.initialize(config);
         handle_result("pose_estimator", result);
     }
+    // FIRE CONTROL
+    {
+        auto config = configuration["fire_control"];
+        auto result = fire_control.initialize(config);
+        handle_result("fire_control", result);
+    }
     // VISUALIZATION
     if (use_visualization) {
         auto config = configuration["visualization"];
@@ -99,8 +104,12 @@ auto main() -> int {
     }
     // DEBUG
     {
-        log_limiter.register_key("control_state_not_updated");
-        log_limiter.register_key("visualization_pnp_failed");
+        action_throttler.register_action("control_state_not_updated", 3);
+        action_throttler.register_action("tracker_tracking", 1);
+        action_throttler.register_action("armor_not_detected");
+        action_throttler.register_action("visualization_pnp_failed", 3);
+        action_throttler.register_action("fire_control_failed");
+        action_throttler.register_action("feishu_commit_failed");
     }
 
     for (;;) {
@@ -110,127 +119,153 @@ auto main() -> int {
         rclcpp_node.spin_once();
 
         if (auto image = capturer.fetch_image()) {
-            auto control_state = ControlState { };
+            // AUTO AIM RESULT
+            auto auto_aim_state = AutoAimState {};
 
-            if (is_local_runtime) {
-                control_state.set_identity();
-            } else {
-                if (!feishu.updated()) {
-                    if (log_limiter.tick("control_state_not_updated")) {
-                        rclcpp_node.warn("Control state尚未更新，使用上一次缓存值.");
-                    } else if (log_limiter.enabled("control_state_not_updated")) {
-                        rclcpp_node.warn("Stop printing control state warnings");
-                    }
-                } else {
-                    log_limiter.reset("control_state_not_updated");
+            auto fetch_control_state = [&]() -> ControlState {
+                if (is_local_runtime) {
+                    action_throttler.dispatch("control_state_not_updated", [&] {
+                        rclcpp_node.info("在本机环境下运行，将Control State 设置为默认值");
+                    });
+                    auto state = ControlState {};
+                    state.set_identity();
+                    return state;
                 }
 
-                control_state = feishu.fetch();
-            }
+                if (!feishu.updated()) {
+                    action_throttler.dispatch("control_state_not_updated",
+                        [&] { rclcpp_node.warn("Control state尚未更新，使用上一次缓存值."); });
+                } else {
+                    action_throttler.reset("control_state_not_updated");
+                }
 
-            auto armors_2d = identifier.sync_identify(*image);
-            if (!armors_2d.has_value()) {
-                continue;
-            }
+                return feishu.fetch();
+            };
 
-            tracker.set_invincible_armors(control_state.invincible_devices);
-            auto filtered_armors_2d = tracker.filter_armors(*armors_2d);
-            if (filtered_armors_2d.empty()) {
-                continue;
-            }
+            auto detect_armors =
+                [&](const auto& image,
+                    const auto& control_state) -> std::optional<std::vector<rmcs::Armor2D>> {
+                auto armors_2d = identifier.sync_identify(image);
+                if (!armors_2d.has_value()) {
+                    action_throttler.dispatch(
+                        "armor_not_detected", [&] { rclcpp_node.warn("未识别到装甲板"); });
+                    return std::nullopt;
+                }
+                action_throttler.reset("armor_not_detected");
 
-            if (use_painted_image) {
-                for (const auto& armor_2d : filtered_armors_2d)
-                    util::draw(*image, armor_2d);
-            }
+                tracker.set_invincible_armors(control_state.invincible_devices);
+                auto filtered_armors_2d = tracker.filter_armors(*armors_2d);
+                if (filtered_armors_2d.empty()) {
+                    return std::nullopt;
+                }
+                return filtered_armors_2d;
+            };
 
-            if (visualization.initialized()) {
-                visualization.send_image(*image);
-            }
+            auto solve_pnp =
+                [&](const auto& armors_2d,
+                    const auto& control_state) -> std::optional<std::vector<rmcs::Armor3D>> {
+                auto armors_3d_opt = pose_estimator.solve_pnp(armors_2d);
+                if (!armors_3d_opt.has_value()) {
+                    return std::nullopt;
+                }
 
-            auto armors_3d_opt = pose_estimator.solve_pnp(filtered_armors_2d);
+                if (visualization.initialized()) {
+                    auto success = visualization.solved_pnp_armors(*armors_3d_opt);
+                    if (!success) {
+                        action_throttler.dispatch("visualization_pnp_failed",
+                            [&] { rclcpp_node.error("可视化PNP结算后的装甲板失败"); });
+                    } else {
+                        action_throttler.reset("visualization_pnp_failed");
+                    }
+                }
 
+                pose_estimator.set_odom_to_camera_transform(control_state.odom_to_camera_transform);
+                return pose_estimator.odom_to_camera(*armors_3d_opt);
+            };
+
+            auto track_armors = [&](const auto& armors_3d) -> std::optional<predictor::Snapshot> {
+                auto [tracker_state, target_device, snapshot_opt] =
+                    tracker.decide(armors_3d, Clock::now());
+
+                if (tracker_state == TrackerState::Tracking) {
+                    action_throttler.dispatch(
+                        "tracker_tracking", [&] { rclcpp_node.info("已进入 Tracking 状态"); });
+                } else {
+                    action_throttler.reset("tracker_tracking");
+                    return std::nullopt;
+                }
+
+                return snapshot_opt;
+            };
+
+            auto execute_fire_control = [&](const auto& snapshot, const auto& control_state) {
+                fire_control.set_bullet_speed(control_state.bullet_speed);
+                auto result_opt =
+                    fire_control.solve(snapshot, control_state.odom_to_muzzle_translation);
+                if (!result_opt) {
+                    action_throttler.dispatch("fire_control_failed",
+                        [&] { rclcpp_node.warn("Fire control solve failed"); });
+                } else {
+                    action_throttler.reset("fire_control_failed");
+                }
+                return result_opt;
+            };
+
+            auto visualize_detection = [&](auto& image, const auto& armors_2d) {
+                if (use_painted_image) {
+                    for (const auto& armor_2d : armors_2d)
+                        util::draw(image, armor_2d);
+                }
+
+                if (visualization.initialized()) {
+                    visualization.send_image(image);
+                }
+            };
+
+            auto commit_result = [&](const auto& result) {
+                auto_aim_state.timestamp       = Clock::now();
+                auto_aim_state.gimbal_takeover = true;
+                auto_aim_state.shoot_permitted = true;
+                auto_aim_state.yaw             = result.yaw;
+                auto_aim_state.pitch           = result.pitch;
+
+                if (!feishu.commit(auto_aim_state)) {
+                    action_throttler.dispatch("feishu_commit_failed",
+                        [&] { rclcpp_node.warn("Commit auto_aim_state failed"); });
+                }
+            };
+
+            auto visualize_prediction = [&](const auto& snapshot) {
+                if (visualization.initialized()) {
+                    visualization.predicted_armors(snapshot.predicted_armors(Clock::now()));
+                }
+            };
+
+            auto control_state = fetch_control_state();
+
+            auto armors_2d_opt = detect_armors(*image, control_state);
+            if (!armors_2d_opt) continue;
+            auto& armors_2d = *armors_2d_opt;
+
+            visualize_detection(*image, armors_2d);
+
+            auto armors_3d_opt = solve_pnp(armors_2d, control_state);
             if (!armors_3d_opt.has_value()) {
                 continue;
             }
 
-            if (visualization.initialized()) {
-                auto success = visualization.solved_pnp_armors(*armors_3d_opt);
-
-                if (!success) {
-                    if (log_limiter.tick("visualization_pnp_failed")) {
-                        rclcpp_node.error("可视化PNP解算后的装甲板失败");
-                    } else if (log_limiter.enabled("visualization_pnp_failed")) {
-                        rclcpp_node.error("Stop printing visualization errors");
-                    }
-                } else {
-                    log_limiter.reset("visualization_pnp_failed");
-                }
-            }
-
-            pose_estimator.set_odom_to_camera_transform(control_state.odom_to_camera_transform);
-            pose_estimator.set_base_to_camera_transform(control_state.base_to_camera_transform);
-            auto armors_3d      = pose_estimator.odom_to_camera(*armors_3d_opt);
-            auto armors_3d_base = pose_estimator.base_to_camera(*armors_3d_opt);
-
-            if (visualization.initialized()) visualization.odom_pnp_armors(armors_3d);
-
-            auto [tracker_state, target_device, snapshot_opt] =
-                tracker.decide(armors_3d, Clock::now());
-
-            std::vector<Armor3D> result_armors;
-
-            if (tracker_state == TrackerState::Tracking) {
-                if (!snapshot_opt) continue;
-
-                auto const& snapshot = *snapshot_opt;
-
-                // TODO: 这里的预测时间临时用了100ms, 但实际上应该是系统响应延时+子弹飞行时间
-                result_armors =
-                    snapshot.predicted_armors(Clock::now() + std::chrono::milliseconds(100));
-
-                if (visualization.initialized()) visualization.predicted_armors(result_armors);
-
-            } else if (tracker_state == TrackerState::Detecting) {
-                // Fallback to the closest armor
-                result_armors = armors_3d;
-            } else continue;
-
-            if (result_armors.empty()) {
+            auto snapshot_opt = track_armors(*armors_3d_opt);
+            if (!snapshot_opt) {
                 continue;
             }
+            auto const& snapshot = *snapshot_opt;
 
-            auto selected_armor = std::min_element(
-                result_armors.begin(), result_armors.end(), [&](const auto& a, const auto& b) {
-                    auto distance_a = std::sqrt(a.translation.x * a.translation.x
-                        + a.translation.y * a.translation.y + a.translation.z * a.translation.z);
-                    auto distance_b = std::sqrt(b.translation.x * b.translation.x
-                        + b.translation.y * b.translation.y + b.translation.z * b.translation.z);
-                    return distance_a < distance_b;
-                });
+            auto result_opt = execute_fire_control(snapshot, control_state);
+            if (!result_opt) continue;
 
-            auto_aim_state.timestamp           = Clock::now();
-            auto_aim_state.target_direction[0] = selected_armor->translation.x;
-            auto_aim_state.target_direction[1] = selected_armor->translation.y;
-            auto_aim_state.target_direction[2] = selected_armor->translation.z;
+            commit_result(*result_opt);
 
-            for (auto armor : armors_3d_base) {
-                if (armor.genre == target_device) {
-                    auto_aim_state.target_position[0] = armor.translation.x;
-                    auto_aim_state.target_position[1] = armor.translation.y;
-                    auto_aim_state.target_position[2] = armor.translation.z;
-                    break;
-                }
-            }
-            for (auto armor : filtered_armors_2d) {
-                if (armor.genre == target_device) {
-                    // TODO: use parameter instead of hardcoded value
-                    auto_aim_state.selected_scan_direction = armor.bl.x < 240 ? 1 : -1;
-                    break;
-                }
-            }
-
-            feishu.commit(auto_aim_state);
+            visualize_prediction(snapshot);
 
         } // image receive scope
 
