@@ -1,4 +1,4 @@
-use_visualization: false
+use_visualization: true
 use_painted_image: true
 is_local_runtime: false
 
@@ -55,20 +55,20 @@ tracker:
 pose_estimator:
   camera_matrix:
     [
-      1.707125013629008e+03,
+      1.697359883602683e+03,
       0.000000000000000e+00,
-      9.256057025839567e+02,
+      6.987864097157160e+02,
       0.000000000000000e+00,
-      1.704675640040794e+03,
-      6.122294049300178e+02,
+      1.695531273965761e+03,
+      5.345094360859539e+02,
       0.000000000000000e+00,
       0.000000000000000e+00,
       1.000000000000000e+00,
     ]
   distort_coeff:
     [
-      -1.570849785908773e-01,
-      1.026876638938050e-01,
+      -3.670283063296025e-02,
+      1.625656765501130e-03,
       0.000000000000000e+00,
       0.000000000000000e+00,
       0.000000000000000e+00,
@@ -88,8 +88,24 @@ pose_estimator:
       t: [0., 0., 0.]
       q: [1., 0., 0., 0.]
 
+fire_control:
+  initial_bullet_speed: 20 # m/s
+  shoot_delay: 0.1 # s
+  shoot_offset_x: 0.0 # m
+  shoot_offset_y: 0.0 # m
+  shoot_offset_z: 0.0 # m
+
+  k: 0.019
+  bias_scale: 1.0
+
+  coming_angle: 60.0 # degree
+  leaving_angle: 20.0 # degree
+  outpost_coming_angle: 70.0 # degree
+  outpost_leaving_angle: 30.0 # degree
+  angular_velocity_threshold: 120 # degree/s
+
 visualization:
   framerate: 60
-  monitor_host: "192.168.137.1"
+  monitor_host: "192.168.5.224"
   monitor_port: "5000"
   stream_type: "RTP_JEPG"
