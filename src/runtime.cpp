@@ -18,6 +18,7 @@
 
 #include <chrono>
 #include <csignal>
+#include <experimental/scope>
 #include <yaml-cpp/yaml.h>
 
 using namespace rmcs;
@@ -282,4 +283,5 @@ auto main() -> int {
     } // runtime loop scope
 
     rclcpp_node.shutdown();
-}
+    return 0;
+} // runtime objects scope
