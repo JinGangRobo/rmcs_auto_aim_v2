@@ -117,7 +117,7 @@ private:
     OutputInterface<double> aim_delay_ms;
 
     // TODO: Move it to config file
-    static constexpr double yaw_aim_offset = -0.1;
+    static constexpr double aim_error_threshold_ = 0.002;
 
     double current_gimbal_yaw { 0. };
     double current_gimbal_pitch { 0. };
@@ -165,6 +165,9 @@ private:
 
     auto update_target_direction() -> void {
         const auto& [yaw, pitch] = std::tie(auto_aim_state.yaw, auto_aim_state.pitch);
+        auto aim_error =
+            std::pow(yaw - current_gimbal_yaw, 2) + std::pow(pitch - current_gimbal_pitch, 2);
+        *shoot_permitted = aim_error < aim_error_threshold_;
 
         // clang-format off
         *target_direction = Eigen::Vector3d {
