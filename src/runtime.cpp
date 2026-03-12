@@ -18,6 +18,7 @@
 
 #include <chrono>
 #include <csignal>
+#include <eigen3/Eigen/src/Geometry/Quaternion.h>
 #include <experimental/scope>
 #include <yaml-cpp/yaml.h>
 
@@ -181,7 +182,6 @@ auto main() -> int {
                 }
 
                 pose_estimator.set_odom_to_camera_transform(control_state.odom_to_camera_transform);
-                pose_estimator.set_base_to_camera_transform(control_state.base_to_camera_transform);
                 return armors_3d_opt;
             };
 
@@ -224,11 +224,22 @@ auto main() -> int {
                 }
             };
 
-            auto commit_result = [&](const auto& result) {
-                auto_aim_state.timestamp       = Clock::now();
-                auto_aim_state.shoot_permitted = true;
-                auto_aim_state.yaw             = result.yaw;
-                auto_aim_state.pitch           = result.pitch;
+            auto commit_result = [&](const auto& result, const auto& snapshot,
+                                     const auto& control_state) {
+                Eigen::Quaterniond odom_to_base_orientation { Eigen::Quaterniond::Identity() };
+                control_state.odom_to_base_transform.orientation.copy_to(odom_to_base_orientation);
+
+                auto state            = snapshot.ekf_x();
+                auto position_in_odom = Eigen::Vector3d { state[0], state[2], state[4] };
+                auto position_in_base = odom_to_base_orientation * position_in_odom;
+
+                auto_aim_state.timestamp          = Clock::now();
+                auto_aim_state.shoot_permitted    = true;
+                auto_aim_state.yaw                = result.yaw;
+                auto_aim_state.pitch              = result.pitch;
+                auto_aim_state.target_position[0] = position_in_base.x();
+                auto_aim_state.target_position[1] = position_in_base.y();
+                auto_aim_state.target_position[2] = position_in_base.z();
 
                 if (!feishu.commit(auto_aim_state)) {
                     action_throttler.dispatch("feishu_commit_failed",
@@ -274,7 +285,7 @@ auto main() -> int {
             auto result_opt = execute_fire_control(snapshot, control_state);
             if (!result_opt) continue;
 
-            commit_result(*result_opt);
+            commit_result(*result_opt, snapshot, control_state);
 
             visualize_prediction(snapshot);
 

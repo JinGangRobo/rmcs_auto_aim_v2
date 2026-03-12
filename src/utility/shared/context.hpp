@@ -61,7 +61,7 @@ struct ControlState {
     DeviceIds invincible_devices { DeviceIds::None() };
 
     Transform odom_to_camera_transform { };
-    Transform base_to_camera_transform { };
+    Transform odom_to_base_transform { };
     Translation odom_to_muzzle_translation { };
 
     auto set_identity() noexcept -> void {
@@ -72,7 +72,7 @@ struct ControlState {
         pitch                      = 0.0;
         invincible_devices         = DeviceIds::None();
         odom_to_camera_transform   = { };
-        base_to_camera_transform   = { };
+        odom_to_base_transform   = { };
         odom_to_muzzle_translation = { };
     }
 };

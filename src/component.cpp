@@ -21,10 +21,7 @@ public:
         : rclcpp { get_component_name() } {
 
         register_input("/tf", rmcs_tf);
-        register_output(
-            "/gimbal/auto_aim/target_position", auto_aim_target_position_); //  TODO: finish it
-        register_output(
-            "/gimbal/auto_aim/scan_direction", auto_aim_scan_direction_); // TODO: finish it
+        register_output("/gimbal/auto_aim/target_position", auto_aim_target_position_);
         register_output("/debug/aim/x", debug_aim_x);
         register_output("/debug/aim/y", debug_aim_y);
         register_output("/debug/aim/z", debug_aim_z);
@@ -110,7 +107,6 @@ public:
 private:
     InputInterface<rmcs_description::Tf> rmcs_tf;
     OutputInterface<Eigen::Vector3d> auto_aim_target_position_;
-    OutputInterface<int8_t> auto_aim_scan_direction_;
     OutputInterface<double> debug_aim_x;
     OutputInterface<double> debug_aim_y;
     OutputInterface<double> debug_aim_z;
@@ -146,10 +142,16 @@ private:
         auto odom_to_camera_transform =
             fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::CameraLink>(
                 *rmcs_tf);
+        auto odom_to_base_transform = fast_tf::lookup_transform<rmcs_description::OdomImu,
+            rmcs_description::GimbalCenterLink>(*rmcs_tf);
 
         control_state.odom_to_camera_transform.position = odom_to_camera_transform.translation();
         control_state.odom_to_camera_transform.orientation =
             Eigen::Quaterniond(odom_to_camera_transform.rotation());
+
+        control_state.odom_to_base_transform.position = Eigen::Vector3d::Zero();
+        control_state.odom_to_base_transform.orientation =
+            Eigen::Quaterniond(odom_to_base_transform);
 
         visual_odom_to_camera->move(control_state.odom_to_camera_transform.position,
             control_state.odom_to_camera_transform.orientation);
@@ -167,7 +169,14 @@ private:
         const auto& [yaw, pitch] = std::tie(auto_aim_state.yaw, auto_aim_state.pitch);
         auto aim_error =
             std::pow(yaw - current_gimbal_yaw, 2) + std::pow(pitch - current_gimbal_pitch, 2);
-        *shoot_permitted = aim_error < aim_error_threshold_;
+        // *shoot_permitted = aim_error < aim_error_threshold_;
+        *shoot_permitted = false;
+
+        *auto_aim_target_position_ = {
+            auto_aim_state.target_position[0],
+            auto_aim_state.target_position[1],
+            auto_aim_state.target_position[2],
+        };
 
         // clang-format off
         *target_direction = Eigen::Vector3d {
