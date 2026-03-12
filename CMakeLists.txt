@@ -22,6 +22,7 @@ find_package(geometry_msgs REQUIRED)
 
 find_package(rmcs_executor REQUIRED)
 find_package(rmcs_description REQUIRED)
+find_package(rmcs_msgs REQUIRED)
 find_package(fast_tf REQUIRED)
 find_package(hikcamera REQUIRED)
 
@@ -37,6 +38,7 @@ include_directories(
 
     ${rmcs_executor_INCLUDE_DIRS}
     ${rmcs_description_INCLUDE_DIRS}
+    ${rmcs_msgs_INCLUDE_DIRS}
     ${fast_tf_INCLUDE_DIRS}
     ${hikcamera_INCLUDE_DIRS}
 )

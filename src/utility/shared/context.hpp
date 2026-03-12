@@ -15,6 +15,12 @@ enum class ShootMode {
     BUFF_LARGE,
 };
 
+enum class SelfColor {
+    UNKNOWN,
+    RED,
+    BLUE,
+};
+
 struct Transform {
     Translation position { };
     Orientation orientation { };
@@ -59,6 +65,7 @@ struct ControlState {
     double pitch { 0. };
 
     DeviceIds invincible_devices { DeviceIds::None() };
+    SelfColor self_color { SelfColor::UNKNOWN };
 
     Transform odom_to_camera_transform { };
     Transform odom_to_base_transform { };
@@ -72,7 +79,7 @@ struct ControlState {
         pitch                      = 0.0;
         invincible_devices         = DeviceIds::None();
         odom_to_camera_transform   = { };
-        odom_to_base_transform   = { };
+        odom_to_base_transform     = { };
         odom_to_muzzle_translation = { };
     }
 };

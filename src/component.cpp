@@ -1,6 +1,7 @@
 #include "kernel/feishu.hpp"
 #include "module/debug/action_throttler.hpp"
 #include "module/debug/framerate.hpp"
+#include "rmcs_msgs/robot_color.hpp"
 #include "utility/clock.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/visual/transform.hpp"
@@ -9,6 +10,7 @@
 #include <cmath>
 #include <rmcs_description/tf_description.hpp>
 #include <rmcs_executor/component.hpp>
+#include <rmcs_msgs/robot_id.hpp>
 
 namespace rmcs {
 
@@ -21,6 +23,7 @@ public:
         : rclcpp { get_component_name() } {
 
         register_input("/tf", rmcs_tf);
+        register_input("/referee/id", robot_id_, rmcs_msgs::RobotId::UNKNOWN);
         register_output("/gimbal/auto_aim/target_position", auto_aim_target_position_);
         register_output("/debug/aim/x", debug_aim_x);
         register_output("/debug/aim/y", debug_aim_y);
@@ -106,7 +109,13 @@ public:
 
 private:
     InputInterface<rmcs_description::Tf> rmcs_tf;
+    InputInterface<float> bullet_speed;
+    InputInterface<rmcs_msgs::RobotId> robot_id_;
     OutputInterface<Eigen::Vector3d> auto_aim_target_position_;
+    OutputInterface<bool> gimbal_takeover;
+    OutputInterface<bool> shoot_permitted;
+    OutputInterface<Eigen::Vector3d> target_direction;
+
     OutputInterface<double> debug_aim_x;
     OutputInterface<double> debug_aim_y;
     OutputInterface<double> debug_aim_z;
@@ -117,7 +126,6 @@ private:
 
     double current_gimbal_yaw { 0. };
     double current_gimbal_pitch { 0. };
-    InputInterface<float> bullet_speed;
 
     RclcppNode rclcpp;
     std::unique_ptr<visual::Transform> visual_odom_to_camera;
@@ -127,10 +135,6 @@ private:
     ControlState control_state;
     AutoAimState auto_aim_state;
     Clock::time_point last_valid_aim_time;
-
-    OutputInterface<bool> gimbal_takeover;
-    OutputInterface<bool> shoot_permitted;
-    OutputInterface<Eigen::Vector3d> target_direction;
 
     FramerateCounter framerate;
     ActionThrottler action_throttler { std::chrono::seconds(1), 233 };
@@ -159,6 +163,9 @@ private:
 
         // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
         control_state.invincible_devices = DeviceIds::None();
+        if (robot_id_->color() != rmcs_msgs::RobotColor::UNKNOWN)
+            control_state.self_color =
+                robot_id_->color() == rmcs_msgs::RobotColor::RED ? SelfColor::RED : SelfColor::BLUE;
 
         control_state.bullet_speed = *bullet_speed;
         control_state.yaw          = current_gimbal_yaw;
@@ -169,8 +176,7 @@ private:
         const auto& [yaw, pitch] = std::tie(auto_aim_state.yaw, auto_aim_state.pitch);
         auto aim_error =
             std::pow(yaw - current_gimbal_yaw, 2) + std::pow(pitch - current_gimbal_pitch, 2);
-        // *shoot_permitted = aim_error < aim_error_threshold_;
-        *shoot_permitted = false;
+        *shoot_permitted = aim_error < aim_error_threshold_;
 
         *auto_aim_target_position_ = {
             auto_aim_state.target_position[0],

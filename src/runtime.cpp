@@ -14,10 +14,13 @@
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
+#include "utility/robot/color.hpp"
+#include "utility/shared/context.hpp"
 #include "utility/singleton/running.hpp"
 
 #include <chrono>
 #include <csignal>
+#include <cstdint>
 #include <eigen3/Eigen/src/Geometry/Quaternion.h>
 #include <experimental/scope>
 #include <yaml-cpp/yaml.h>
@@ -144,9 +147,8 @@ auto main() -> int {
                 return feishu.fetch();
             };
 
-            auto detect_armors =
-                [&](const auto& image,
-                    const auto& control_state) -> std::optional<std::vector<rmcs::Armor2D>> {
+            auto detect_armors = [&](const auto& image, const ControlState& control_state)
+                -> std::optional<std::vector<rmcs::Armor2D>> {
                 auto armors_2d = identifier.sync_identify(image);
                 if (!armors_2d.has_value()) {
                     action_throttler.dispatch(
@@ -155,6 +157,11 @@ auto main() -> int {
                 }
                 action_throttler.reset("armor_not_detected");
 
+                if (control_state.self_color != SelfColor::UNKNOWN) {
+                    if (control_state.self_color == SelfColor::RED)
+                        tracker.set_enemy_color(CampColor::BLUE);
+                    else tracker.set_enemy_color(CampColor::RED);
+                }
                 tracker.set_invincible_armors(control_state.invincible_devices);
                 auto filtered_armors_2d = tracker.filter_armors(*armors_2d);
                 if (filtered_armors_2d.empty()) {
