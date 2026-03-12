@@ -1,6 +1,7 @@
 #include "visualization.hpp"
 
 #include <fstream>
+#include <memory>
 
 #include "module/debug/visualization/armor_visualizer.hpp"
 #include "module/debug/visualization/stream_session.hpp"
@@ -49,11 +50,14 @@ struct Visualization::Impl {
     bool is_initialized  = false;
     bool size_determined = false;
 
-    std::unique_ptr<debug::ArmorVisualizer> armor_visualizer;
+    std::unique_ptr<debug::ArmorVisualizer> solved_pnp_visualizer;
+    std::unique_ptr<debug::ArmorVisualizer> predicted_visualizer;
+    std::unique_ptr<debug::ArmorVisualizer> odom_pnp_visualizer;
 
     Impl() noexcept {
-        session          = std::make_unique<debug::StreamSession>();
-        armor_visualizer = std::make_unique<debug::ArmorVisualizer>();
+        session               = std::make_unique<debug::StreamSession>();
+        solved_pnp_visualizer = std::make_unique<debug::ArmorVisualizer>();
+        predicted_visualizer  = std::make_unique<debug::ArmorVisualizer>();
     }
 
     auto initialize(const YAML::Node& yaml, RclcppNode& visual_node) noexcept -> NormalResult {
@@ -75,7 +79,8 @@ struct Visualization::Impl {
             return std::unexpected { "Unknown video type: " + config.stream_type };
         }
 
-        armor_visualizer->initialize(visual_node);
+        solved_pnp_visualizer->initialize(visual_node);
+        predicted_visualizer->initialize(visual_node);
 
         is_initialized = true;
         return {};
@@ -127,17 +132,17 @@ struct Visualization::Impl {
 
     auto solved_pnp_armors(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
-        return armor_visualizer->visualize(armors, "solved_pnp_armors", "camera_link");
+        return solved_pnp_visualizer->visualize(armors, "solved_pnp_armors", "camera_link");
     }
 
     auto odom_pnp_armors(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
-        return armor_visualizer->visualize(armors, "odom_pnp_armors", "odom_imu_link");
+        return odom_pnp_visualizer->visualize(armors, "odom_pnp_armors", "odom_imu_link");
     }
 
     auto predicted_armors(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
-        return armor_visualizer->visualize(armors, "predicted_armors", "odom_imu_link");
+        return predicted_visualizer->visualize(armors, "predicted_armors", "odom_imu_link");
     }
 };
 

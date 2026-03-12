@@ -34,7 +34,6 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
         ASSERT_TRUE(ctrl.has_value());
 
         auto auto_state            = AutoAimState {};
-        auto_state.gimbal_takeover = true;
         auto_state.shoot_permitted = true;
         auto_state.yaw             = 1.23;
 
@@ -61,7 +60,7 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
         }
     }
 
-    EXPECT_TRUE(auto_state->gimbal_takeover);
+    ASSERT_TRUE(auto_state.has_value());
     EXPECT_TRUE(auto_state->shoot_permitted);
     EXPECT_DOUBLE_EQ(auto_state->yaw, 1.23);
 

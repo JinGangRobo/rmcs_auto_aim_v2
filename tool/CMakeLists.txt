@@ -10,6 +10,7 @@ set(RMCS_SRC_DIR "${RMCS_SOURCE_DIR}/src")
 find_package(rclcpp REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(OpenVINO REQUIRED)
 
 find_package(OpenCV 4 REQUIRED)
 
@@ -22,6 +23,17 @@ include_directories(
 )
 
 set(TOOL_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_library(
+    tool_terminal
+    ${TOOL_DIR}/util/terminal.cpp
+    ${TOOL_DIR}/util/snapshot.cpp
+)
+target_include_directories(
+    tool_terminal
+    PUBLIC
+    ${TOOL_DIR}
+)
 
 # Visualization
 add_executable(
@@ -39,6 +51,19 @@ target_link_libraries(
     ${visualization_msgs_LIBRARIES}
     ${geometry_msgs_LIBRARIES}
 )
+
+add_executable(
+    ov-model-status
+    ${TOOL_DIR}/ov_model_status.cpp
+)
+target_link_libraries(
+    ov-model-status
+    openvino::runtime
+)
+
+#
+# Need Hikcamera
+#
 
 find_package(hikcamera QUIET)
 
@@ -61,6 +86,7 @@ if(HIKCAMERA_AVAILABLE)
     )
     target_link_libraries(
         hikcamera
+        tool_terminal
         ${OpenCV_LIBS}
         ${hikcamera_LIBRARIES}
     )
@@ -77,6 +103,7 @@ if(HIKCAMERA_AVAILABLE)
     )
     target_link_libraries(
         streaming
+        tool_terminal
         rclcpp::rclcpp
         ${OpenCV_LIBS}
         ${hikcamera_LIBRARIES}

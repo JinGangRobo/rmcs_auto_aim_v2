@@ -24,7 +24,7 @@ capturer:
     fixed_framerate: true
   local_video:
     # 替换为你具体的路径
-    location: "/workspaces/alliance/test_videos/solve_pnp_v2.mp4"
+    location: "/workspaces/alliance/test_videos/translation.mp4"
     # double 帧率
     frame_rate: 60
     # bool 是否循环播放
@@ -36,17 +36,20 @@ identifier:
   binarization_threshold: 0.5
 
   # openvino infer
-  model_location: "yolov5.xml"
+  avaliable_models:
+    - "tongji-yolov5.xml"
+    - "shenzhen-0526.onnx"
+    - "shenzhen-0708.onnx"
+  model_location: "shenzhen-0526.onnx"
   infer_device: "AUTO"
   use_roi_segment: false
-  use_corner_correction: false
   roi_rows: 640
   roi_cols: 640
   input_rows: 640
   input_cols: 640
   min_confidence: 0.5
-  score_threshold: 0.7
-  nms_threshold: 0.3
+  score_threshold: 0.8
+  nms_threshold: 0.45
 
 tracker:
   # blue or red
@@ -98,10 +101,10 @@ fire_control:
   k: 0.019
   bias_scale: 1.0
 
-  coming_angle: 60.0 # degree
-  leaving_angle: 20.0 # degree
-  outpost_coming_angle: 70.0 # degree
-  outpost_leaving_angle: 30.0 # degree
+  coming_angle: 60.0      # degree
+  leaving_angle: 20.0     # degree
+  outpost_coming_angle: 70.0      # degree
+  outpost_leaving_angle: 30.0     # degree
   angular_velocity_threshold: 120 # degree/s
 
 visualization:
