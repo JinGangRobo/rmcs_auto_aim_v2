@@ -109,7 +109,7 @@ public:
 
 private:
     InputInterface<rmcs_description::Tf> rmcs_tf;
-    InputInterface<float> bullet_speed;
+    InputInterface<double> bullet_speed;
     InputInterface<rmcs_msgs::RobotId> robot_id_;
     OutputInterface<Eigen::Vector3d> auto_aim_target_position_;
     OutputInterface<bool> gimbal_takeover;

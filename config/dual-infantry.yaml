@@ -1,4 +1,4 @@
-use_visualization: true
+use_visualization: false
 use_painted_image: true
 is_local_runtime: false
 
@@ -14,7 +14,7 @@ capturer:
     # float
     exposure_us: 2000.0
     # float
-    framerate: 60
+    framerate: 50
     # float
     gain: 16.9807
 
@@ -40,7 +40,7 @@ identifier:
     - "tongji-yolov5.xml"
     - "shenzhen-0526.onnx"
     - "shenzhen-0708.onnx"
-  model_location: "shenzhen-0526.onnx"
+  model_location: "tongji-yolov5.xml"
   infer_device: "AUTO"
   use_roi_segment: false
   roi_rows: 640
@@ -101,10 +101,10 @@ fire_control:
   k: 0.019
   bias_scale: 1.0
 
-  coming_angle: 60.0      # degree
-  leaving_angle: 20.0     # degree
-  outpost_coming_angle: 70.0      # degree
-  outpost_leaving_angle: 30.0     # degree
+  coming_angle: 60.0 # degree
+  leaving_angle: 20.0 # degree
+  outpost_coming_angle: 70.0 # degree
+  outpost_leaving_angle: 30.0 # degree
   angular_velocity_threshold: 120 # degree/s
 
 visualization:
