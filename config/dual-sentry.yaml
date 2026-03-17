@@ -1,4 +1,4 @@
-use_visualization: false
+use_visualization: true
 use_painted_image: true
 is_local_runtime: false
 
@@ -36,17 +36,20 @@ identifier:
   binarization_threshold: 0.5
 
   # openvino infer
-  model_location: "yolov5.xml"
+  avaliable_models:
+    - "tongji-yolov5.xml"
+    - "shenzhen-0526.onnx"
+    - "shenzhen-0708.onnx"
+  model_location: "shenzhen-0708.onnx"
   infer_device: "AUTO"
   use_roi_segment: false
-  use_corner_correction: false
   roi_rows: 640
   roi_cols: 640
   input_rows: 640
   input_cols: 640
   min_confidence: 0.5
-  score_threshold: 0.7
-  nms_threshold: 0.3
+  score_threshold: 0.8
+  nms_threshold: 0.45
 
 tracker:
   # blue or red
@@ -106,6 +109,6 @@ fire_control:
 
 visualization:
   framerate: 60
-  monitor_host: "192.168.137.1"
+  monitor_host: "192.168.5.224"
   monitor_port: "5000"
   stream_type: "RTP_JEPG"
