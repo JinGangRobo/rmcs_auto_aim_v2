@@ -1,0 +1,114 @@
+use_visualization: false
+use_painted_image: true
+is_local_runtime: false
+
+capturer:
+  show_loss_framerate: false
+  show_loss_framerate_interval: 500
+  reconnect_wait_interval: 100
+  # hikcamera or local_video
+  source: "hikcamera"
+  hikcamera:
+    # int
+    timeout_ms: 500
+    # float
+    exposure_us: 2000.0
+    # float
+    framerate: 50
+    # float
+    gain: 16.9807
+
+    invert_image: false
+    software_sync: false
+    trigger_mode: false
+    fixed_framerate: true
+  local_video:
+    # 替换为你具体的路径
+    location: "/workspaces/alliance/test_videos/translation.mp4"
+    # double 帧率
+    frame_rate: 60
+    # bool 是否循环播放
+    loop_play: true
+    # bool 是否允许跳帧以满足实时性
+    allow_skipping: false
+
+identifier:
+  binarization_threshold: 0.5
+
+  # openvino infer
+  avaliable_models:
+    - "tongji-yolov5.xml"
+    - "shenzhen-0526.onnx"
+    - "shenzhen-0708.onnx"
+  model_location: "tongji-yolov5.xml"
+  infer_device: "AUTO"
+  use_roi_segment: false
+  roi_rows: 640
+  roi_cols: 640
+  input_rows: 640
+  input_cols: 640
+  min_confidence: 0.5
+  score_threshold: 0.8
+  nms_threshold: 0.45
+
+tracker:
+  # blue or red
+  enemy_color: blue
+
+pose_estimator:
+  camera_matrix:
+    [
+      1.756255219450848e+03,
+      -5.054192293502829e-01,
+      6.953898717721391e+02,
+      0.000000000000000e+00,
+      1.756214325533238e+03,
+      5.504133103385731e+02,
+      0.000000000000000e+00,
+      0.000000000000000e+00,
+      1.000000000000000e+00,
+    ]
+  distort_coeff:
+    [
+      -5.514856331396014e-02,
+      8.602711996236094e-02,
+      -5.939740452924132e-04,
+      -8.270592316020454e-04,
+      0.000000000000000e+00,
+    ]
+
+  transforms:
+    - parent: "imu_link"
+      child: "pitch_link"
+      t: [0., 0., 0.]
+      q: [1., 0., 0., 0.]
+    - parent: "pitch_link"
+      child: "muzzle_link"
+      t: [0., 0., 0.]
+      q: [1., 0., 0., 0.]
+    - parent: "pitch_link"
+      child: "camera_link"
+      t: [0., 0., 0.]
+      q: [1., 0., 0., 0.]
+
+fire_control:
+  initial_bullet_speed: 20 # m/s
+  shoot_delay: 0.1 # s
+  shoot_offset_x: 0.0 # m
+  shoot_offset_y: 0.0 # m
+  shoot_offset_z: 0.0 # m
+
+  k: 0.019
+  bias_scale: 1.0
+
+  coming_angle: 60.0 # degree
+  leaving_angle: 20.0 # degree
+  outpost_coming_angle: 70.0 # degree
+  outpost_leaving_angle: 30.0 # degree
+  angular_velocity_threshold: 120 # degree/s
+
+visualization:
+  framerate: 60
+  monitor_host: "192.168.137.1"
+  monitor_port: "5000"
+  stream_type: "RTP_JEPG"
