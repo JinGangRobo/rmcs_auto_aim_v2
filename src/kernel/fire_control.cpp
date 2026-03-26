@@ -1,11 +1,15 @@
 #include "fire_control.hpp"
 
+#include "kernel/tracker.hpp"
 #include "module/fire_control/aim_point_chooser.hpp"
 #include "module/fire_control/trajectory_solution.hpp"
 #include "module/predictor/snapshot.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/serializable.hpp"
+#include "utility/shared/context.hpp"
+#include <cmath>
+#include <eigen3/Eigen/src/Geometry/Quaternion.h>
 
 using namespace rmcs::kernel;
 using namespace rmcs::fire_control;
@@ -79,7 +83,7 @@ struct FireControl::Impl {
         };
         aim_point_chooser.initialize(chooser_config);
 
-        return {};
+        return { };
     }
 
     const int kMaxIterateCount { 5 };
@@ -87,7 +91,8 @@ struct FireControl::Impl {
 
     auto set_bullet_speed(double speed) -> void { bullet_speed_buffer = speed; }
 
-    auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation)
+    auto solve(const predictor::Snapshot& snapshot, util::Transform const& odom_to_muzzle_transform,
+        const std::optional<std::vector<rmcs::Armor3D>>& armors_3d, kernel::Tracker& tracker)
         -> std::optional<Result> {
         auto state                    = snapshot.ekf_x();
         auto target_position_in_world = Eigen::Vector3d { state[0], state[2], state[4] };
@@ -100,13 +105,15 @@ struct FireControl::Impl {
 
         auto current_fly_time = target_position_in_world.norm() / bullet_speed;
 
-        auto best_armor_opt    = std::optional<Armor3D> {};
-        auto trajectory_result = TrajectorySolution::Output {};
+        auto best_armor_opt    = std::optional<Armor3D> { };
+        auto trajectory_result = TrajectorySolution::Output { };
         auto horizon_distance  = 0.0;
 
-        auto solution_params       = fire_control::TrajectorySolution::TrajectoryParams {};
+        auto solution_params       = fire_control::TrajectorySolution::TrajectoryParams { };
         solution_params.k          = config.k;
         solution_params.bias_scale = config.bias_scale;
+
+        double final_yaw = 0.0;
 
         for (int i = 0; i < kMaxIterateCount; ++i) {
             // 计算预测的时间点 = 子弹飞行时间 + 系统响应延迟
@@ -121,21 +128,48 @@ struct FireControl::Impl {
             best_armor_opt = aim_point_chooser.choose_armor(predicted_armors, predicted_ekf_x);
             if (!best_armor_opt) return std::nullopt;
 
+            if (armors_3d) {
+                for (const auto& armor_3d : *armors_3d) {
+                    // TODO: if the predicted armor is too far from the detected armor, we consider
+                    // the prediction is wrong and reset the tracker, it it a temporal solution for
+                    // the problem.
+                    auto armor_3d_position   = Eigen::Vector3d { armor_3d.translation.x,
+                        armor_3d.translation.y, armor_3d.translation.z };
+                    auto best_armor_position = Eigen::Vector3d { best_armor_opt->translation.x,
+                        best_armor_opt->translation.y, best_armor_opt->translation.z };
+                    auto distance            = (armor_3d_position - best_armor_position).norm();
+                    if (distance > 1.0) {
+                        tracker.reset(best_armor_opt->genre);
+                        return std::nullopt;
+                    }
+                }
+            }
+
             auto const& armor_translation = best_armor_opt->translation;
 
-            auto armor_position_in_world = Eigen::Vector3d {};
+            auto armor_position_in_world = Eigen::Vector3d { };
             armor_translation.copy_to(armor_position_in_world);
 
-            auto _odom_to_muzzle_translation = Eigen::Vector3d {};
-            odom_to_muzzle_translation.copy_to(_odom_to_muzzle_translation);
+            auto _odom_to_muzzle_translation = Eigen::Vector3d { };
+            auto _odom_to_muzzle_orientation = Eigen::Quaterniond { };
+            odom_to_muzzle_transform.position.copy_to(_odom_to_muzzle_translation);
+            _odom_to_muzzle_orientation =
+                Eigen::Quaterniond { odom_to_muzzle_transform.orientation.w, 0., 0.,
+                    odom_to_muzzle_transform.orientation.z };
 
-            auto bullet_in_muzzle = armor_position_in_world - _odom_to_muzzle_translation;
+            auto bullet_in_muzzle = _odom_to_muzzle_orientation.inverse()
+                * (armor_position_in_world - _odom_to_muzzle_translation);
+
+            if (std::abs(std::atan2(bullet_in_muzzle.y(), bullet_in_muzzle.x())) > M_PI / 3) {
+                log.warn("Target is behind the muzzle, skipping...");
+                return std::nullopt;
+            }
 
             auto target_d = std::sqrt(bullet_in_muzzle.x() * bullet_in_muzzle.x()
                 + bullet_in_muzzle.y() * bullet_in_muzzle.y());
             auto target_h = bullet_in_muzzle.z();
 
-            auto solution           = TrajectorySolution {};
+            auto solution           = TrajectorySolution { };
             solution.input.v0       = bullet_speed;
             solution.input.target_d = target_d;
             solution.input.target_h = target_h;
@@ -152,10 +186,17 @@ struct FireControl::Impl {
             trajectory_result = *result;
             horizon_distance  = target_d;
 
+            if (target_d > 0.9) {
+                final_yaw =
+                    std::atan2(best_armor_opt->translation.y, best_armor_opt->translation.x);
+            } else {
+                // if the target is too close, we use the current position to calculate the yaw in
+                // order to avoid the large error caused by the position prediction error.
+                final_yaw = std::atan2(target_position_in_world.y(), target_position_in_world.x());
+            }
+
             if (time_error < kMaxFlyTimeThreshold) break;
         }
-
-        auto final_yaw = std::atan2(best_armor_opt->translation.y, best_armor_opt->translation.x);
 
         return Result {
             .pitch            = trajectory_result.pitch,
@@ -176,6 +217,8 @@ auto FireControl::initialize(const YAML::Node& yaml) noexcept -> std::expected<v
 auto FireControl::set_bullet_speed(double speed) -> void { return pimpl->set_bullet_speed(speed); }
 
 auto FireControl::solve(const predictor::Snapshot& snapshot,
-    Translation const& odom_to_muzzle_translation) -> std::optional<Result> {
-    return pimpl->solve(snapshot, odom_to_muzzle_translation);
+    util::Transform const& odom_to_muzzle_tranform,
+    const std::optional<std::vector<rmcs::Armor3D>>& armors_3d, kernel::Tracker& tracker)
+    -> std::optional<Result> {
+    return pimpl->solve(snapshot, odom_to_muzzle_tranform, armors_3d, tracker);
 }

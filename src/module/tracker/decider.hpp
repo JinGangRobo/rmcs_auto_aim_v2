@@ -22,6 +22,7 @@ public:
     };
 
     auto set_priority_mode(PriorityMode const& mode) -> void;
+    auto reset_tracker(DeviceId id) -> void;
 
     auto update(std::span<Armor3D const> armors, Clock::time_point t) -> Output;
 };

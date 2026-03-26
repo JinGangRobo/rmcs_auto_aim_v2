@@ -207,18 +207,20 @@ auto main() -> int {
                 return snapshot_opt;
             };
 
-            auto execute_fire_control = [&](const auto& snapshot, const auto& control_state) {
-                fire_control.set_bullet_speed(control_state.bullet_speed);
-                auto result_opt =
-                    fire_control.solve(snapshot, control_state.odom_to_muzzle_translation);
-                if (!result_opt) {
-                    action_throttler.dispatch("fire_control_failed",
-                        [&] { rclcpp_node.warn("Fire control solve failed"); });
-                } else {
-                    action_throttler.reset("fire_control_failed");
-                }
-                return result_opt;
-            };
+            auto execute_fire_control =
+                [&](const auto& snapshot, const auto& control_state,
+                    const std::optional<std::vector<rmcs::Armor3D>>& armors_3d_in_odom) {
+                    fire_control.set_bullet_speed(control_state.bullet_speed);
+                    auto result_opt = fire_control.solve(snapshot,
+                        control_state.odom_to_muzzle_transform, armors_3d_in_odom, tracker);
+                    if (!result_opt) {
+                        action_throttler.dispatch("fire_control_failed",
+                            [&] { rclcpp_node.warn("Fire control solve failed"); });
+                    } else {
+                        action_throttler.reset("fire_control_failed");
+                    }
+                    return result_opt;
+                };
 
             auto visualize_detection = [&](auto& image, const auto& armors_2d) {
                 if (use_painted_image) {
@@ -289,7 +291,7 @@ auto main() -> int {
             }
             auto const& snapshot = *snapshot_opt;
 
-            auto result_opt = execute_fire_control(snapshot, control_state);
+            auto result_opt = execute_fire_control(snapshot, control_state, armors_3d);
             if (!result_opt) continue;
 
             commit_result(*result_opt, snapshot, control_state);

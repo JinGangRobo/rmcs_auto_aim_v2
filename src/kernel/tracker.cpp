@@ -2,6 +2,7 @@
 
 #include "module/tracker/armor_filter.hpp"
 #include "module/tracker/decider.hpp"
+#include "utility/robot/id.hpp"
 #include "utility/serializable.hpp"
 
 using namespace rmcs::kernel;
@@ -32,16 +33,14 @@ struct Tracker::Impl {
             return std::unexpected { "enemy_color 应该是 [blue] or [red]." };
         }
 
-        return {};
+        return { };
     }
 
     auto set_invincible_armors(DeviceIds devices) -> void {
         return filter.set_invincible_armors(devices);
     }
 
-    auto set_enemy_color(CampColor color) -> void {
-        filter.set_enemy_color(color);
-    }
+    auto set_enemy_color(CampColor color) -> void { filter.set_enemy_color(color); }
 
     auto filter_armors(std::span<Armor2D> const& armors) const -> std::vector<Armor2D> {
         auto result = filter.filter(armors);
@@ -52,6 +51,8 @@ struct Tracker::Impl {
         auto decider_output = decider.update(armors, t);
         return decider_output;
     }
+
+    auto reset(DeviceId id) -> void { decider.reset_tracker(id); }
 
     // TODO:need to choose armor by priority
 };
@@ -68,9 +69,7 @@ auto Tracker::set_invincible_armors(DeviceIds devices) -> void {
     return pimpl->set_invincible_armors(devices);
 }
 
-auto Tracker::set_enemy_color(CampColor color) -> void {
-    return pimpl->set_enemy_color(color);
-}
+auto Tracker::set_enemy_color(CampColor color) -> void { return pimpl->set_enemy_color(color); }
 
 auto Tracker::filter_armors(std::span<Armor2D> armors) const -> std::vector<Armor2D> {
     return pimpl->filter_armors(armors);
@@ -79,3 +78,5 @@ auto Tracker::filter_armors(std::span<Armor2D> armors) const -> std::vector<Armo
 auto Tracker::decide(std::span<Armor3D const> armors, Clock::time_point t) -> Decider::Output {
     return pimpl->decide(armors, t);
 }
+
+auto Tracker::reset(DeviceId id) -> void { return pimpl->reset(id); }

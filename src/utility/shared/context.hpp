@@ -69,18 +69,18 @@ struct ControlState {
 
     Transform odom_to_camera_transform { };
     Transform odom_to_base_transform { };
-    Translation odom_to_muzzle_translation { };
+    Transform odom_to_muzzle_transform { };
 
     auto set_identity() noexcept -> void {
-        timestamp                  = Clock::now();
-        shoot_mode                 = ShootMode::STOPPING;
-        bullet_speed               = 0.0;
-        yaw                        = 0.0;
-        pitch                      = 0.0;
-        invincible_devices         = DeviceIds::None();
-        odom_to_camera_transform   = { };
-        odom_to_base_transform     = { };
-        odom_to_muzzle_translation = { };
+        timestamp                = Clock::now();
+        shoot_mode               = ShootMode::STOPPING;
+        bullet_speed             = 0.0;
+        yaw                      = 0.0;
+        pitch                    = 0.0;
+        invincible_devices       = DeviceIds::None();
+        odom_to_camera_transform = { };
+        odom_to_base_transform   = { };
+        odom_to_muzzle_transform = { };
     }
 };
 static_assert(std::is_trivially_copyable_v<ControlState>);

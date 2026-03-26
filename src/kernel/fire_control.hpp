@@ -1,12 +1,15 @@
 #pragma once
 
 #include <expected>
+#include <vector>
 #include <yaml-cpp/yaml.h>
 
+#include "kernel/tracker.hpp"
 #include "module/predictor/snapshot.hpp"
 #include "utility/clock.hpp"
-#include "utility/math/linear.hpp"
 #include "utility/pimpl.hpp"
+#include "utility/robot/armor.hpp"
+#include "utility/shared/context.hpp"
 
 namespace rmcs::kernel {
 
@@ -26,7 +29,9 @@ public:
 
     auto set_bullet_speed(double speed) -> void;
 
-    auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation)
+    auto solve(const predictor::Snapshot& snapshot,
+        util::Transform const& odom_to_muzzle_translation,
+        const std::optional<std::vector<Armor3D>>& armors_3d, kernel::Tracker& tracker)
         -> std::optional<Result>;
 };
 }

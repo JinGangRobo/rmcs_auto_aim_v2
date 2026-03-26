@@ -40,7 +40,7 @@ identifier:
     - "tongji-yolov5.xml"
     - "shenzhen-0526.onnx"
     - "shenzhen-0708.onnx"
-  model_location: "tongji-yolov5.xml"
+  model_location: "shenzhen-0526.onnx"
   infer_device: "AUTO"
   use_roi_segment: false
   roi_rows: 640
@@ -58,22 +58,22 @@ tracker:
 pose_estimator:
   camera_matrix:
     [
-      1.697359883602683e+03,
+      1.760469453583046e+03,
+      -1.205591323106101e-01,
+      7.136328714286723e+02,
       0.000000000000000e+00,
-      6.987864097157160e+02,
-      0.000000000000000e+00,
-      1.695531273965761e+03,
-      5.345094360859539e+02,
+      1.759528809621155e+03,
+      5.645682629211107e+02,
       0.000000000000000e+00,
       0.000000000000000e+00,
       1.000000000000000e+00,
     ]
   distort_coeff:
     [
-      -3.670283063296025e-02,
-      1.625656765501130e-03,
-      0.000000000000000e+00,
-      0.000000000000000e+00,
+      -5.421573551329903e-02,
+      8.576774189105786e-02,
+      -2.773180726155705e-04,
+      1.521839235326641e-04,
       0.000000000000000e+00,
     ]
 
@@ -108,7 +108,7 @@ fire_control:
   angular_velocity_threshold: 120 # degree/s
 
 visualization:
-  framerate: 60
+  framerate: 30
   monitor_host: "192.168.5.224"
   monitor_port: "5000"
   stream_type: "RTP_JEPG"

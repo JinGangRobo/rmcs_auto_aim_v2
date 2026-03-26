@@ -157,6 +157,13 @@ private:
         control_state.odom_to_base_transform.orientation =
             Eigen::Quaterniond(odom_to_base_transform);
 
+        auto odom_to_muzzle_transform =
+            fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::MuzzleLink>(
+                *rmcs_tf);
+        control_state.odom_to_muzzle_transform.position = odom_to_muzzle_transform.translation();
+        control_state.odom_to_muzzle_transform.orientation =
+            Eigen::Quaterniond(odom_to_muzzle_transform.rotation());
+
         visual_odom_to_camera->move(control_state.odom_to_camera_transform.position,
             control_state.odom_to_camera_transform.orientation);
         visual_odom_to_camera->update();

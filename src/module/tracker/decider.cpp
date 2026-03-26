@@ -67,6 +67,13 @@ struct Decider::Impl {
         };
     }
 
+    auto reset_tracker(DeviceId id) -> void {
+        trackers.erase(id);
+        last_seen_time.erase(id);
+        coverged_fail_count.erase(id);
+        if (primary_target_id == id) primary_target_id = DeviceId::UNKNOWN;
+    }
+
     auto arbitrate(Clock::time_point now) -> DeviceId {
         auto candidates = trackers | std::views::filter([&](const auto& pair) {
             return util::delta_time(now, last_seen_time[pair.first]) < active_interval;
@@ -108,7 +115,7 @@ struct Decider::Impl {
 
     PriorityMode priority_mode;
 
-    int max_coverged_fail_count { 80 };
+    int max_coverged_fail_count { 40 };
     std::chrono::duration<double> cleanup_interval { 500ms };
     std::chrono::duration<double> active_interval { 100ms };
 
@@ -144,6 +151,8 @@ Decider::~Decider() noexcept = default;
 auto Decider::set_priority_mode(PriorityMode const& mode) -> void {
     return pimpl->set_priority_mode(mode);
 }
+
+auto Decider::reset_tracker(DeviceId id) -> void { return pimpl->reset_tracker(id); }
 
 auto Decider::update(std::span<Armor3D const> armors, Clock::time_point t) -> Output {
     return pimpl->update(armors, t);

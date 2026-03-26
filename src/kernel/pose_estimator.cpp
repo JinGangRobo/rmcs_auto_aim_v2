@@ -99,6 +99,18 @@ struct PoseEstimator::Impl {
                 pnp_solution.result.translation.copy_to(armor_3d.translation);
                 pnp_solution.result.orientation.copy_to(armor_3d.orientation);
 
+                Eigen::Vector3d position = Eigen::Vector3d { };
+                armor_3d.translation.copy_to(position);
+
+                position = -position.normalized(); // now it point to camera from armor
+                Eigen::Quaterniond orientation = Eigen::Quaterniond { };
+                armor_3d.orientation.copy_to(orientation);
+                Eigen::Vector3d armor_normal = orientation * Eigen::Vector3d::UnitY();
+                double armor_facing_angle    = std::acos(armor_normal.dot(position));
+                if (armor_facing_angle > M_PI || armor_facing_angle < 0) {
+                    return;
+                }
+
                 armors_in_camera.emplace_back(armor_3d);
             });
 

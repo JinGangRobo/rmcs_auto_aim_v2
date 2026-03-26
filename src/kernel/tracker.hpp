@@ -24,5 +24,7 @@ public:
     auto filter_armors(std::span<Armor2D> armors) const -> std::vector<Armor2D>;
 
     auto decide(std::span<Armor3D const> armors, Clock::time_point t) -> tracker::Decider::Output;
+
+    auto reset(DeviceId id) -> void;
 };
 }
