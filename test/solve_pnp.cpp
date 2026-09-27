@@ -17,6 +17,7 @@
 #include "module/detector/armor_detection.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
+#include "utility/model/infer_backend.hpp"
 #include "utility/robot/armor.hpp"
 
 using namespace rmcs::util;
@@ -175,6 +176,10 @@ protected:
     const double max_allowed_yaw_error_deg        = 15.0; // 15 degrees
 
     void SetUp() override {
+        if (!has_infer_backend()) {
+            GTEST_SKIP() << "Inference backend not available";
+        }
+
         test_case                  = GetParam();
         solution.input             = create_test_input();
         solution.input.armor_shape = create_small_armor_shape();

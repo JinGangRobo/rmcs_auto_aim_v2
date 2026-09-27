@@ -10,7 +10,13 @@ add_compile_options(-Wall -Wextra -Wpedantic -O3)
 ## 依赖查找
 find_package(yaml-cpp REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(OpenVINO REQUIRED)
+
+## Compile-time inference backend selection: `none` or a backend module name
+## from cmake/backend/. Adding a backend needs no change to this file.
+set(RMCS_AUTO_AIM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
+set(RMCS_AUTO_AIM_INFER_BACKEND "openvino" CACHE STRING
+    "Inference backend: `none` or a name from cmake/backend/ (no auto selection)"
+)
 
 ## mvs-usb3-core 是海康 MVS 的 usb3-only 版本，find.cmake 由 Dockerfile 生成
 if(CMAKE_SYSROOT)
@@ -40,6 +46,11 @@ find_package(fast_tf REQUIRED)
 find_package(rmcs_utility REQUIRED)
 
 
+## Resolve the compile-time inference backend (see cmake/InferBackend.cmake)
+include("${RMCS_AUTO_AIM_ROOT}/cmake/InferBackend.cmake")
+rmcs_auto_aim_configure_infer_backend()
+
+
 set(AUTO_AIM_COMPONENT
     ${PROJECT_SOURCE_DIR}/src/component.cpp
     ${PROJECT_SOURCE_DIR}/src/io/capturer/capturer.cpp
@@ -54,6 +65,9 @@ file(GLOB_RECURSE AUTO_AIM_UTILITY
     ${PROJECT_SOURCE_DIR}/src/utility/*.cpp
     ${PROJECT_SOURCE_DIR}/src/utility/*.cc
 )
+## Backend sources are selected and compiled only when enabled
+list(FILTER AUTO_AIM_UTILITY EXCLUDE REGEX "/utility/model/backend/")
+list(APPEND AUTO_AIM_UTILITY ${RMCS_AUTO_AIM_BACKEND_SELECTED_SOURCES})
 file(GLOB_RECURSE AUTO_AIM_KERNEL
     CONFIGURE_DEPENDS
     ${PROJECT_SOURCE_DIR}/src/kernel/*.cpp
@@ -76,6 +90,7 @@ target_include_directories(
     ${PROJECT_SOURCE_DIR}/src/
     ${rmcs_msgs_INCLUDE_DIRS}
     PRIVATE
+    ${RMCS_AUTO_AIM_BACKEND_GENERATED_INCLUDE_DIR}
     ${visualization_msgs_INCLUDE_DIRS}
     ${geometry_msgs_INCLUDE_DIRS}
     ${std_msgs_INCLUDE_DIRS}
@@ -95,6 +110,15 @@ target_link_libraries(
     ${std_msgs_LIBRARIES}
     ${tf2_ros_LIBRARIES}
 )
+
+## Link the selected backend libraries (empty when the backend is disabled)
+if(RMCS_AUTO_AIM_BACKEND_SELECTED_LIBS)
+    target_link_libraries(
+        ${PROJECT_NAME}_utility
+        PRIVATE
+        ${RMCS_AUTO_AIM_BACKEND_SELECTED_LIBS}
+    )
+endif()
 
 ## 核心构建: kernel and module
 add_library(
@@ -125,7 +149,6 @@ target_link_libraries(
     ${PROJECT_NAME}_module
     PUBLIC
     ${PROJECT_NAME}_utility
-    openvino::runtime
 )
 
 ## 组件构建: component

@@ -5,6 +5,8 @@
 #include "module/detector/models/shenzhen_0708.hpp"
 #include "module/detector/models/tongji_yolov5.hpp"
 
+#include "utility/model/infer_backend.hpp"
+
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -138,6 +140,10 @@ auto assert_sync_infer_with_expected(const cv::Mat& image,
 }
 
 TEST(model, sync_infer) {
+    if (!has_infer_backend()) {
+        GTEST_SKIP() << "Inference backend not available";
+    }
+
     const auto image_location = assets_manager.path("model_infer_example.jpg");
     auto image                = cv::imread(image_location);
     ASSERT_FALSE(image.empty()) << error_head
@@ -155,6 +161,10 @@ TEST(model, sync_infer) {
 }
 
 TEST(model, sync_infer_with_roi_segment) {
+    if (!has_infer_backend()) {
+        GTEST_SKIP() << "Inference backend not available";
+    }
+
     const auto image_location = assets_manager.path("model_infer_example.jpg");
     auto image                = cv::imread(image_location);
     ASSERT_FALSE(image.empty()) << error_head
@@ -172,6 +182,10 @@ TEST(model, sync_infer_with_roi_segment) {
 }
 
 TEST(model, sync_infer_rejects_empty_image) {
+    if (!has_infer_backend()) {
+        GTEST_SKIP() << "Inference backend not available";
+    }
+
     auto detector      = make_detector<TongJiYoloV5>();
     auto empty_image   = cv::Mat { };
     auto detect_result = detector->sync_detect(empty_image);
@@ -180,6 +194,10 @@ TEST(model, sync_infer_rejects_empty_image) {
 }
 
 TEST(model, sync_infer_rejects_invalid_roi) {
+    if (!has_infer_backend()) {
+        GTEST_SKIP() << "Inference backend not available";
+    }
+
     const auto image_location = assets_manager.path("model_infer_example.jpg");
     auto image                = cv::imread(image_location);
     ASSERT_FALSE(image.empty()) << error_head

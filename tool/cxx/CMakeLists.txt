@@ -11,7 +11,7 @@ find_package(rclcpp REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(OpenVINO REQUIRED)
+find_package(OpenVINO QUIET)
 
 find_package(OpenCV 4 REQUIRED)
 
@@ -120,14 +120,18 @@ target_link_libraries(
     ${OpenCV_LIBS}
 )
 
-add_executable(
-    ov-model-status
-    ${TOOL_DIR}/ov_model_status.cpp
-)
-target_link_libraries(
-    ov-model-status
-    openvino::runtime
-)
+if(OpenVINO_FOUND)
+    add_executable(
+        ov-model-status
+        ${TOOL_DIR}/ov_model_status.cpp
+    )
+    target_link_libraries(
+        ov-model-status
+        openvino::runtime
+    )
+else()
+    message(STATUS "OpenVINO not found; skipping ov-model-status (openvino-specific tool)")
+endif()
 
 #
 # Need Hikcamera

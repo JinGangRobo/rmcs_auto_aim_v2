@@ -1,0 +1,21 @@
+# -----------------------------------------------------------------------------
+# Template for a new inference backend module.
+#
+# 1) copy this file to cmake/backend/<name>.cmake
+# 2) replace <SdkPackage> / <Name> / <NAME> / <name> below
+# 3) rebuild with -DRMCS_AUTO_AIM_INFER_BACKEND=<name>
+#
+# Nothing in the main CMakeLists.txt or in infer_backend.* needs to change.
+# The module is picked up automatically by cmake/InferBackend.cmake.
+# -----------------------------------------------------------------------------
+find_package(<SdkPackage> QUIET)
+
+set(RMCS_AUTO_AIM_BACKEND_<NAME>_FOUND ${<SdkPackage>_FOUND})
+set(RMCS_AUTO_AIM_BACKEND_<NAME>_SOURCES
+    "${RMCS_AUTO_AIM_ROOT}/src/utility/model/backend/<name>_backend.cpp"
+)
+set(RMCS_AUTO_AIM_BACKEND_<NAME>_LIBS <sdk::target>)
+set(RMCS_AUTO_AIM_BACKEND_<NAME>_INCLUDE
+    "#include \"utility/model/backend/<name>_backend.hpp\""
+)
+set(RMCS_AUTO_AIM_BACKEND_<NAME>_FACTORY "rmcs::<Name>Backend::create(spec)")
