@@ -2,9 +2,9 @@
 
 #include <cstdint>
 #include <exception>
-#include <experimental/scope>
 #include <filesystem>
 #include <fstream>
+#include <rknn_api.h>
 #include <string>
 #include <utility>
 
@@ -75,6 +75,14 @@ RknnBackend::RknnBackend(ModelSpec spec)
 
 RknnBackend::~RknnBackend() {
     if (ctx_ != 0) {
+        if (input_mem_ != nullptr) {
+            rknn_destroy_mem(ctx_, input_mem_);
+            input_mem_ = nullptr;
+        }
+        if (output_mem_ != nullptr) {
+            rknn_destroy_mem(ctx_, output_mem_);
+            output_mem_ = nullptr;
+        }
         rknn_destroy(ctx_);
         ctx_ = 0;
     }
@@ -97,6 +105,10 @@ auto RknnBackend::create(const ModelSpec& spec)
             "rknn_init failed (" + std::to_string(ret) + "): " + model_path,
         };
     }
+    ret = rknn_set_core_mask(backend->ctx_, RKNN_NPU_CORE_0);
+    if (ret != RKNN_SUCC) {
+        return std::unexpected { "rknn_set_core_mask failed (" + std::to_string(ret) + ")" };
+    }
 
     // The runtime owns its copy of the model from now on.
     backend->model_buf_.clear();
@@ -112,7 +124,7 @@ auto RknnBackend::create(const ModelSpec& spec)
             + "/" + std::to_string(io_num.n_output) };
     }
 
-    auto input_attr = rknn_tensor_attr { };
+    auto& input_attr = backend->input_attr_;
     ret = rknn_query(backend->ctx_, RKNN_QUERY_INPUT_ATTR, &input_attr, sizeof(input_attr));
     if (ret != RKNN_SUCC) {
         return std::unexpected { "rknn_query(INPUT_ATTR) failed (" + std::to_string(ret) + ")" };
@@ -122,7 +134,7 @@ auto RknnBackend::create(const ModelSpec& spec)
             + " does not match ModelSpec" };
     }
 
-    auto output_attr = rknn_tensor_attr { };
+    auto& output_attr = backend->output_attr_;
     ret = rknn_query(backend->ctx_, RKNN_QUERY_OUTPUT_ATTR, &output_attr, sizeof(output_attr));
     if (ret != RKNN_SUCC) {
         return std::unexpected { "rknn_query(OUTPUT_ATTR) failed (" + std::to_string(ret) + ")" };
@@ -138,6 +150,48 @@ auto RknnBackend::create(const ModelSpec& spec)
         backend->out_shape_ = { output_attr.dims[0], output_attr.dims[1], output_attr.dims[2] };
     }
 
+    // Zero-copy input: bind a u8 NHWC buffer; `pass_through = 0` keeps the
+    // model's normalization fused into the NPU. Zero-copy input is NHWC only.
+    input_attr.index        = 0;
+    input_attr.type         = RKNN_TENSOR_UINT8;
+    input_attr.fmt          = RKNN_TENSOR_NHWC;
+    input_attr.pass_through = 0;
+
+    backend->input_mem_ = rknn_create_mem(backend->ctx_, input_attr.size_with_stride);
+    if (backend->input_mem_ == nullptr || backend->input_mem_->virt_addr == nullptr) {
+        return std::unexpected { "rknn_create_mem(input) failed" };
+    }
+
+    const auto input_stride = input_attr.w_stride != 0
+        ? static_cast<std::size_t>(input_attr.w_stride) * 3
+        : static_cast<std::size_t>(cv::Mat::AUTO_STEP);
+    backend->input_view_    = cv::Mat {
+        static_cast<int>(spec.dimensions.H),
+        static_cast<int>(spec.dimensions.W),
+        CV_8UC3,
+        backend->input_mem_->virt_addr,
+        input_stride,
+    };
+
+    ret = rknn_set_io_mem(backend->ctx_, backend->input_mem_, &input_attr);
+    if (ret != RKNN_SUCC) {
+        return std::unexpected { "rknn_set_io_mem(input) failed (" + std::to_string(ret) + ")" };
+    }
+
+    // Zero-copy output: let the runtime write f32 results straight into this
+    // buffer, which back InferOutput::data until the next inference.
+    output_attr.type     = RKNN_TENSOR_FLOAT32;
+    backend->output_mem_ = rknn_create_mem(
+        backend->ctx_, output_attr.n_elems * static_cast<std::uint32_t>(sizeof(float)));
+    if (backend->output_mem_ == nullptr || backend->output_mem_->virt_addr == nullptr) {
+        return std::unexpected { "rknn_create_mem(output) failed" };
+    }
+
+    ret = rknn_set_io_mem(backend->ctx_, backend->output_mem_, &output_attr);
+    if (ret != RKNN_SUCC) {
+        return std::unexpected { "rknn_set_io_mem(output) failed (" + std::to_string(ret) + ")" };
+    }
+
     return std::unique_ptr<InferBackend> { std::move(backend) };
 }
 
@@ -150,47 +204,24 @@ auto RknnBackend::infer(const cv::Mat& input) noexcept -> std::expected<InferOut
             return std::unexpected { "RKNN input size does not match ModelSpec" };
         }
 
-        cv::cvtColor(input, rgb_buf_, cv::COLOR_BGR2RGB);
+        cv::cvtColor(input, input_view_, cv::COLOR_BGR2RGB);
 
-        auto rknn_in         = rknn_input { };
-        rknn_in.index        = 0;
-        rknn_in.buf          = rgb_buf_.data;
-        rknn_in.size         = static_cast<std::uint32_t>(rgb_buf_.total() * rgb_buf_.elemSize());
-        rknn_in.type         = RKNN_TENSOR_UINT8;
-        rknn_in.fmt          = RKNN_TENSOR_NHWC;
-        rknn_in.pass_through = 0;
-
-        auto ret = rknn_inputs_set(ctx_, 1, &rknn_in);
-        if (ret != RKNN_SUCC) {
-            return std::unexpected { "rknn_inputs_set failed (" + std::to_string(ret) + ")" };
-        }
-
-        ret = rknn_run(ctx_, nullptr);
+        auto ret = rknn_run(ctx_, nullptr);
         if (ret != RKNN_SUCC) {
             return std::unexpected { "rknn_run failed (" + std::to_string(ret) + ")" };
         }
 
-        auto rknn_out       = rknn_output { };
-        rknn_out.index      = 0;
-        rknn_out.want_float = 1;
-        ret                 = rknn_outputs_get(ctx_, 1, &rknn_out, nullptr);
-        if (ret != RKNN_SUCC) {
-            return std::unexpected { "rknn_outputs_get failed (" + std::to_string(ret) + ")" };
-        }
-        auto release =
-            std::experimental::scope_exit { [&] { rknn_outputs_release(ctx_, 1, &rknn_out); } };
-
-        const auto count = rknn_out.size / sizeof(float);
-        const auto* raw  = static_cast<const float*>(rknn_out.buf);
-        out_data_.assign(raw, raw + count);
+        return InferOutput {
+            .data =
+                std::span<const float> {
+                    static_cast<const float*>(output_mem_->virt_addr),
+                    output_attr_.n_elems,
+                },
+            .shape = out_shape_,
+        };
     } catch (const std::exception& e) {
         return std::unexpected { std::string { "RKNN inference failed: " } + e.what() };
     }
-
-    return InferOutput {
-        .data  = out_data_,
-        .shape = out_shape_,
-    };
 }
 
 }

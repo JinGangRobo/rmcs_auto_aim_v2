@@ -63,6 +63,9 @@ RKNN 后端需要 Rockchip 的 `librknnrt.so` 与头文件：
 
 ## 输入 / 输出约定
 
+- **零拷贝**：输入/输出张量内存各用 `rknn_create_mem` 分配一次，并通过 `rknn_set_io_mem` 绑定，
+  每帧推理不再有暂存拷贝。输入用 `cv::cvtColor` 直接写入 NPU 输入内存；输出直接从 NPU 输出内存
+  读取，`InferOutput::data` 指向该内存，生命周期保持到下一次 `infer()`（与 OpenVINO 后端一致）。
 - **输入**：`u8`、`NHWC`、**RGB**、640×640，`pass_through=0`（由 RKNPU 运行时完成归一化），与官方
   `rknn_yolov5_demo` 一致。后端内部会把输入 `cv::Mat`（BGR）转成 RGB。
 - **输出**：单个输出张量 `[1, 25200, 22]`（float），直接作为 `InferOutput` 交给上层

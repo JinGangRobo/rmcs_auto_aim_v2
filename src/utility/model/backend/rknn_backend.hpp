@@ -20,9 +20,12 @@ namespace rmcs {
 /// `shenzhen-0526.onnx` -> `shenzhen-0526.rknn`, so the robot config keeps
 /// pointing at the original model file.
 ///
-/// A u8 NHWC RGB image is fed with `pass_through = 0`, letting the runtime apply
-/// the model's own normalization; the raw float output tensor is returned
-/// untouched.
+/// Inference is zero-copy: the input/output tensor memory is allocated once with
+/// `rknn_create_mem` and bound through `rknn_set_io_mem`, so no per-frame
+/// staging copy is made. A u8 NHWC RGB image is written straight into the input
+/// memory with `pass_through = 0`, letting the runtime apply the model's own
+/// normalization; the raw float output is read straight out of the output
+/// tensor memory.
 ///
 class RknnBackend final : public InferBackend {
 public:
@@ -43,11 +46,22 @@ private:
     /// `rknn_init`, so it is released as soon as loading succeeds.
     std::vector<std::uint8_t> model_buf_;
 
-    /// Reused RGB buffer backing the NHWC input of each inference.
-    cv::Mat rgb_buf_;
+    /// Zero-copy tensor memory bound to the model input/output with
+    /// `rknn_set_io_mem`; the runtime reads and writes these buffers in place.
+    rknn_tensor_mem* input_mem_ { nullptr };
+    rknn_tensor_mem* output_mem_ { nullptr };
 
-    /// Keeps the latest output alive to back the lifetime of InferOutput::data.
-    std::vector<float> out_data_;
+    /// Attributes used to bind the tensor memory. The input is bound as u8 NHWC
+    /// with `pass_through = 0` (the runtime applies the model's normalization);
+    /// the output is bound as f32.
+    rknn_tensor_attr input_attr_ { };
+    rknn_tensor_attr output_attr_ { };
+
+    /// RGB view over the NPU input memory: converts the BGR frame directly into
+    /// the zero-copy buffer, honouring the tensor width stride via the Mat step.
+    cv::Mat input_view_;
+
+    /// Backs the lifetime of InferOutput::data until the next `infer()`.
     std::array<std::size_t, 3> out_shape_ { 0, 0, 0 };
 };
 
