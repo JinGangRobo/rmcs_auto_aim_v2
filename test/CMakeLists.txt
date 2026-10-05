@@ -15,11 +15,22 @@ find_package(geometry_msgs REQUIRED)
 find_package(rmcs_msgs REQUIRED)
 
 find_package(yaml-cpp REQUIRED)
-find_package(OpenVINO REQUIRED)
 find_package(OpenCV 4.5 REQUIRED)
+
+# Resolve the inference backend; reuse the parent package's selection when the
+# tests are built as part of the package, otherwise resolve it independently.
+if(NOT DEFINED RMCS_AUTO_AIM_HAS_BACKEND)
+    set(RMCS_AUTO_AIM_ROOT "${RMCS_SOURCE_DIR}")
+    if(NOT DEFINED RMCS_AUTO_AIM_INFER_BACKEND)
+        set(RMCS_AUTO_AIM_INFER_BACKEND "openvino")
+    endif()
+    include("${RMCS_AUTO_AIM_ROOT}/cmake/InferBackend.cmake")
+    rmcs_auto_aim_configure_infer_backend()
+endif()
 
 include_directories(
     ${RMCS_SRC_DIR}
+    ${RMCS_AUTO_AIM_BACKEND_GENERATED_INCLUDE_DIR}
     ${hikcamera_INCLUDE_DIRS}
     ${rclcpp_INCLUDE_DIRS}
     ${visualization_msgs_INCLUDE_DIRS}
@@ -29,6 +40,13 @@ include_directories(
 )
 
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Detector and inference backend sources (compiled directly into tests; keep in sync with the package)
+set(AUTO_AIM_DETECTOR_SOURCES
+    ${RMCS_SRC_DIR}/module/detector/armor_detection.cpp
+    ${RMCS_SRC_DIR}/utility/model/infer_backend.cpp
+    ${RMCS_AUTO_AIM_BACKEND_SELECTED_SOURCES}
+)
 
 # Duck
 ament_add_gtest(
@@ -57,14 +75,16 @@ ament_add_gtest(
 ament_add_gtest(
     test_model_infer
     ${TEST_DIR}/model_infer.cpp
-    ${RMCS_SRC_DIR}/module/detector/armor_detection.cpp
+    ${AUTO_AIM_DETECTOR_SOURCES}
 )
 target_link_libraries(
     test_model_infer
     yaml-cpp::yaml-cpp
-    openvino::runtime
     ${OpenCV_LIBRARIES}
 )
+if(RMCS_AUTO_AIM_BACKEND_SELECTED_LIBS)
+    target_link_libraries(test_model_infer ${RMCS_AUTO_AIM_BACKEND_SELECTED_LIBS})
+endif()
 
 # Device Id
 ament_add_gtest(
@@ -80,7 +100,7 @@ ament_add_gtest(
     ${RMCS_SRC_DIR}/utility/math/solve_pnp/yaw_optimizer.cpp
     ${RMCS_SRC_DIR}/utility/math/reprojection.cpp
     ${RMCS_SRC_DIR}/utility/math/camera.cpp
-    ${RMCS_SRC_DIR}/module/detector/armor_detection.cpp
+    ${AUTO_AIM_DETECTOR_SOURCES}
 )
 ament_target_dependencies(
     test_solve_pnp
@@ -91,9 +111,11 @@ ament_target_dependencies(
 target_link_libraries(
     test_solve_pnp
     ${OpenCV_LIBRARIES}
-    openvino::runtime
     yaml-cpp::yaml-cpp
 )
+if(RMCS_AUTO_AIM_BACKEND_SELECTED_LIBS)
+    target_link_libraries(test_solve_pnp ${RMCS_AUTO_AIM_BACKEND_SELECTED_LIBS})
+endif()
 
 # Static TF
 ament_add_gtest(

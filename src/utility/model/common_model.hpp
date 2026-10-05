@@ -3,16 +3,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <ranges>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 
-#include <openvino/runtime/core.hpp>
-
 namespace rmcs {
-
-inline auto kRealTimePerformanceMode =
-    ov::hint::performance_mode(ov::hint::PerformanceMode::LATENCY);
 
 /// @brief:
 /// POD 结构体，用于语义化地设置各个维度的值，比如：
@@ -20,7 +18,7 @@ inline auto kRealTimePerformanceMode =
 /// auto dimensions = Dimensions{ .W = 100, .H = 100 };
 /// ```
 struct Dimensions {
-    using Value = ov::Dimension::value_type;
+    using Value = std::int64_t;
 
     Value N = 1;
     Value C = 3;
@@ -46,6 +44,7 @@ struct Dimensions {
 ///
 /// @brief:
 /// 模型布局，用于语义化生成 layout, shape 等数据结构
+/// Engine-agnostic: it only describes the N/C/W/H ordering.
 ///
 struct TensorLayout {
 private:
@@ -89,7 +88,6 @@ public:
         return TensorLayout { std::string_view { parsed.data(), 4 } };
     }
 
-public:
     constexpr explicit TensorLayout(std::string_view description) {
         if (description.size() == 5 && description[4] == '\0') {
             description.remove_suffix(1);
@@ -103,23 +101,36 @@ public:
         std::ranges::copy_n(description.begin(), 4, chars.begin());
     }
 
-    constexpr auto layout() const noexcept { return ov::Layout { chars.data() }; }
-
-    constexpr auto partial_shape(const Dimensions& dimensions) const noexcept {
-        return ov::PartialShape {
-            dimensions.at(chars[0]),
-            dimensions.at(chars[1]),
-            dimensions.at(chars[2]),
-            dimensions.at(chars[3]),
-        };
+    /// 4-character layout string in N/C/W/H order, e.g. "NHWC".
+    constexpr auto str() const noexcept -> std::string_view {
+        return std::string_view { chars.data(), 4 };
     }
+
+    /// Expand Dimensions into a 4D shape following this layout's dimension order.
     constexpr auto shape(const Dimensions& dimensions) const noexcept {
-        return ov::Shape { {
+        return std::array<std::size_t, 4> {
             static_cast<std::size_t>(dimensions.at(chars[0])),
             static_cast<std::size_t>(dimensions.at(chars[1])),
             static_cast<std::size_t>(dimensions.at(chars[2])),
             static_cast<std::size_t>(dimensions.at(chars[3])),
-        } };
+        };
     }
 };
+
+///
+/// @brief:
+/// Engine-agnostic model description. Backends use it to load and preprocess the model,
+/// so model types no longer carry their own compilation logic.
+///
+struct ModelSpec {
+    std::string location;
+
+    /// Inference device hint, e.g. "CPU" / "AUTO"; interpreted by the backend.
+    std::string device = "AUTO";
+
+    TensorLayout input_layout = TensorLayout::from<"NHWC">();
+    TensorLayout model_layout = TensorLayout::from<"NCHW">();
+    Dimensions dimensions     = Dimensions { .W = 640, .H = 640 };
+};
+
 }

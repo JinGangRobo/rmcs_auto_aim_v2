@@ -5,17 +5,19 @@
 #include "module/detector/models/tongji_yolov5.hpp"
 
 #include "utility/math/sigmoid.hpp"
-#include "utility/model/common_model.hpp"
+#include "utility/model/infer_backend.hpp"
 #include "utility/robot/id.hpp"
 #include "utility/serializable.hpp"
 
 #include <filesystem>
+#include <memory>
+#include <span>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <opencv2/dnn/dnn.hpp>
 #include <opencv2/imgproc.hpp>
-#include <openvino/runtime/compiled_model.hpp>
-#include <openvino/runtime/core.hpp>
-#include <openvino/runtime/exception.hpp>
 
 using namespace rmcs::detector;
 
@@ -23,7 +25,7 @@ struct ArmorDetection::Impl {
     struct ExplainInterface {
         virtual ~ExplainInterface() = default;
 
-        virtual auto explain(ov::InferRequest&) const noexcept -> Armor2ds = 0;
+        virtual auto explain(const InferOutput&) const noexcept -> Armor2ds = 0;
     };
     template <class model_type>
     struct StaticExplainFunctor final : ExplainInterface {
@@ -41,15 +43,12 @@ struct ArmorDetection::Impl {
             , adapt_scaling { scaling }
             , roi_offset { offset } { }
 
-        auto explain(ov::InferRequest& finished_request) const noexcept -> Armor2ds override {
+        auto explain(const InferOutput& output) const noexcept -> Armor2ds override {
             using result_type    = typename model_type::Result;
             using precision_type = typename result_type::precision_type;
 
-            auto tensor = finished_request.get_output_tensor();
-            auto& shape = tensor.get_shape();
-
-            const auto rows = static_cast<std::size_t>(shape.at(1));
-            const auto cols = static_cast<std::size_t>(shape.at(2));
+            const auto rows = output.shape.at(1);
+            const auto cols = output.shape.at(2);
             if (cols != result_type::length()) {
                 return { };
             }
@@ -58,10 +57,10 @@ struct ArmorDetection::Impl {
             auto scores         = std::vector<float> { };
             auto boxes          = std::vector<cv::Rect> { };
 
-            const auto* data = tensor.data<precision_type>();
+            const auto* data = output.data.data();
             for (std::size_t row = 0; row < rows; row++) {
                 auto line = result_type { };
-                line.unsafe_from(std::span { data + row * cols, cols });
+                line.unsafe_from(std::span<const precision_type> { data + row * cols, cols });
                 line.confidence() = util::sigmoid(line.confidence());
 
                 if (line.confidence() > min_confidence) {
@@ -128,8 +127,7 @@ struct ArmorDetection::Impl {
         std::make_shared<std::monostate>(),
     };
 
-    ov::Core openvino_core;
-    ov::CompiledModel openvino_model;
+    std::unique_ptr<InferBackend> infer_backend;
     std::unique_ptr<ExplainInterface> explain_infer_functor;
 
     TensorLayout input_layout = TensorLayout::from<"NHWC">();
@@ -149,15 +147,14 @@ struct ArmorDetection::Impl {
                 std::filesystem::path { config.model_location }.filename().string();
 
             /*''*/ if (model_name == TongJiYoloV5::kLocation) {
-                compile_model_with<TongJiYoloV5>();
+                return compile_model_with<TongJiYoloV5>();
             } else if (model_name == ShenZhen0526::kLocation) {
-                compile_model_with<ShenZhen0526>();
+                return compile_model_with<ShenZhen0526>();
             } else if (model_name == ShenZhen0708::kLocation) {
-                compile_model_with<ShenZhen0708>();
+                return compile_model_with<ShenZhen0708>();
             } else {
                 return std::unexpected { "Unsupported model type: " + model_name };
             }
-            return { };
 
         } catch (const std::runtime_error& e) {
             return std::unexpected { std::string { "Failed to load model | " } + e.what() };
@@ -168,7 +165,7 @@ struct ArmorDetection::Impl {
     }
 
     template <class model_type>
-    auto compile_model_with() -> void {
+    auto compile_model_with() -> std::expected<void, std::string> {
         auto model = model_type { };
         if (!config.infer_device.empty()) {
             model.infer_device = config.infer_device;
@@ -181,16 +178,29 @@ struct ArmorDetection::Impl {
             model.dimensions.H = config.input_rows;
         }
 
-        openvino_model   = model.compile(openvino_core, config.model_location);
-        input_layout     = model.input_layout;
-        input_dimensions = model.dimensions;
+        auto spec         = ModelSpec { };
+        spec.location     = config.model_location;
+        spec.device       = model.infer_device;
+        spec.input_layout = model.input_layout;
+        spec.model_layout = model.model_layout;
+        spec.dimensions   = model.dimensions;
+
+        auto backend = InferBackend::create(spec);
+        if (!backend.has_value()) {
+            return std::unexpected { backend.error() };
+        }
+
+        infer_backend    = std::move(backend.value());
+        input_layout     = spec.input_layout;
+        input_dimensions = spec.dimensions;
         explain_infer_functor =
             std::make_unique<StaticExplainFunctor<model_type>>(config.min_confidence,
                 config.score_threshold, config.nms_threshold, adapt_scaling, roi_offset);
+        return { };
     }
 
-    auto generate_openvino_request(const cv::Mat& origin_mat) noexcept
-        -> std::expected<ov::InferRequest, std::string> {
+    auto generate_input_mat(const cv::Mat& origin_mat) noexcept
+        -> std::expected<cv::Mat, std::string> {
         if (origin_mat.empty()) [[unlikely]] {
             return std::unexpected { "Empty image mat" };
         }
@@ -223,30 +233,21 @@ struct ArmorDetection::Impl {
             }
         }
 
-        const auto rows   = static_cast<int>(input_dimensions.H);
-        const auto cols   = static_cast<int>(input_dimensions.W);
-        auto input_tensor = ov::Tensor {
-            ov::element::u8,
-            input_layout.shape(input_dimensions),
-        };
-        {
-            adapt_scaling = std::min(static_cast<float>(1. * cols / segmentation.cols),
-                static_cast<float>(1. * rows / segmentation.rows));
+        const auto rows = static_cast<int>(input_dimensions.H);
+        const auto cols = static_cast<int>(input_dimensions.W);
 
-            const auto scaled_w = static_cast<int>(1. * segmentation.cols * adapt_scaling);
-            const auto scaled_h = static_cast<int>(1. * segmentation.rows * adapt_scaling);
+        adapt_scaling = std::min(static_cast<float>(1. * cols / segmentation.cols),
+            static_cast<float>(1. * rows / segmentation.rows));
 
-            auto input_mat = cv::Mat { rows, cols, CV_8UC3, input_tensor.data() };
-            input_mat.setTo(cv::Scalar::all(0));
+        const auto scaled_w = static_cast<int>(1. * segmentation.cols * adapt_scaling);
+        const auto scaled_h = static_cast<int>(1. * segmentation.rows * adapt_scaling);
 
-            auto input_roi = cv::Rect2i { 0, 0, scaled_w, scaled_h };
-            cv::resize(segmentation, input_mat(input_roi), { scaled_w, scaled_h });
-        }
+        auto input_mat = cv::Mat { rows, cols, CV_8UC3, cv::Scalar::all(0) };
 
-        auto request = openvino_model.create_infer_request();
-        request.set_input_tensor(input_tensor);
+        auto input_roi = cv::Rect2i { 0, 0, scaled_w, scaled_h };
+        cv::resize(segmentation, input_mat(input_roi), { scaled_w, scaled_h });
 
-        return request;
+        return input_mat;
     }
 
     template <class raw_type>
@@ -269,23 +270,29 @@ struct ArmorDetection::Impl {
         return armor;
     }
 
-    auto explain_infer_result(ov::InferRequest& finished_request) const {
+    auto explain_infer_result(const InferOutput& output) const {
         if (!explain_infer_functor) {
             return Armor2ds { };
         }
-        return explain_infer_functor->explain(finished_request);
+        return explain_infer_functor->explain(output);
     }
 
     auto sync_detect(const cv::Mat& image) noexcept -> Armor2ds {
-        auto result = generate_openvino_request(image);
-        if (!result.has_value()) {
+        if (!infer_backend) {
             return { };
         }
 
-        auto request = std::move(result.value());
-        request.infer();
+        auto input_mat = generate_input_mat(image);
+        if (!input_mat.has_value()) {
+            return { };
+        }
 
-        return explain_infer_result(request);
+        auto output = infer_backend->infer(input_mat.value());
+        if (!output.has_value()) {
+            return { };
+        }
+
+        return explain_infer_result(output.value());
     }
 };
 
